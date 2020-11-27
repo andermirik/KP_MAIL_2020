@@ -1,10 +1,12 @@
 package com.example.maliclient.model
 
 class UserCard {
+    var id : Long = -1
     var login: String = ""
     var is_add : Boolean = false
 
-    constructor(login : String) {
+    constructor(id : Long, login : String) {
+        this.id = id
         this.login = login
     }
 

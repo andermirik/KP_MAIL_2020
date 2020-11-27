@@ -4,6 +4,7 @@ import android.content.Intent
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import android.os.Handler
+import androidx.room.Room
 
 class SplashScreenActivity : AppCompatActivity() {
 
@@ -14,15 +15,22 @@ class SplashScreenActivity : AppCompatActivity() {
     override fun onStart() {
         super.onStart()
 
-        //firebaseUser = FirebaseAuth.getInstance().currentUser
-        //if(firebaseUser != null) {
-        intent = Intent(this@SplashScreenActivity, LoginActivity::class.java)
-        startActivity(intent)
-        finish()
-        //}else{
-        //    intent = Intent(this@SplashScreenActivity, LoginActivity::class.java)
-        //    startActivity(intent)
-        //    finish()
+        var db = Room.databaseBuilder(
+            applicationContext,
+            AppDatabase::class.java, "database"
+        )
+            .allowMainThreadQueries()
+            .build()
+
+        if(db.userDao().getAll().isNotEmpty()){
+            intent = Intent(this@SplashScreenActivity, MainActivity::class.java)
+            startActivity(intent)
+            finish()
+        }else{
+            intent = Intent(this@SplashScreenActivity, LoginActivity::class.java)
+            startActivity(intent)
+            finish()
         }
+    }
 
 }

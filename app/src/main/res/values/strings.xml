@@ -1,4 +1,4 @@
 <resources>
     <string name="app_name">MaliClient</string>
-    <string name="login_str">Want to <font color='#01C6DB'>change IMAP</font> parameters?</string>
+    <string name="login_str"><font color='#01C6DB'>skip</font></string>
 </resources>

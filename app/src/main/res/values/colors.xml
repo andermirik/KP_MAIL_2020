@@ -6,4 +6,10 @@
     <color name="white">#fff</color>
     <color name="temp">#FF5722</color>
     <color name="transparent">#00000000</color>
+    
+    <color name="nav_selected">#3D455C</color>
+    <color name="nav_background">#2D3750</color>
+
+    <color name="folder_blue">#2196F3</color>
+
 </resources>
