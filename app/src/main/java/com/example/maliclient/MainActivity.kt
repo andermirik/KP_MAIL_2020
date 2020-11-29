@@ -5,29 +5,27 @@ import android.graphics.Color
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
-import android.widget.TextView
 import android.widget.Toast
-import androidx.appcompat.app.ActionBarDrawerToggle
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.room.Room
-import androidx.room.RoomDatabase
 import com.example.maliclient.adapter.FolderAdapter
+import com.example.maliclient.adapter.MessageAdapter
 import com.example.maliclient.adapter.UserAdapter
 import com.example.maliclient.model.FolderCard
+import com.example.maliclient.model.MessageCard
 import com.example.maliclient.model.User
 import com.example.maliclient.model.UserCard
-import com.google.android.material.navigation.NavigationView
 import kotlinx.android.synthetic.main.activity_main.*
 import kotlinx.android.synthetic.main.activity_main.view.*
 import kotlinx.android.synthetic.main.nav_main.*
 import kotlinx.android.synthetic.main.nav_main.view.*
+import org.jsoup.Jsoup
+import java.io.IOException
 import java.util.*
-import javax.mail.Folder
-import javax.mail.Message
-import javax.mail.Session
-import javax.mail.Store
-import kotlin.collections.HashMap
+import javax.mail.*
+import javax.mail.internet.InternetAddress
+import javax.mail.internet.MimeMultipart
 
 
 class MainActivity : AppCompatActivity() {
@@ -78,27 +76,6 @@ class MainActivity : AppCompatActivity() {
         }
 
         drawer.set(drawer.nav_view, nav_view.rv_users)
-
-
-
-        val thread = Thread(Runnable {
-            return@Runnable;
-//            var message: Message? = null
-//            var inbox = store.getFolder("INBOX")
-//            inbox.open(Folder.READ_ONLY)
-//
-//            inbox.messageCount
-//
-//            message = inbox.getMessage(inbox.messageCount)
-//            var multipart : Multipart = message?.content as Multipart
-//            var a = multipart.contentType
-
-            //var body  = multipart.getBodyPart(0).content as Multipart
-            //var body2 = body.getBodyPart(1).content
-//            inbox.close()
-        })
-
-        thread.start()
     }
 
     fun on_select_user(users : List<UserCard>, position : Int){
@@ -117,8 +94,40 @@ class MainActivity : AppCompatActivity() {
         finish()
     }
 
-    fun on_select_folder(folder : Array<FolderCard>, position: Int){
+    fun on_select_folder(folders : Array<FolderCard>, position: Int){
+        folder_name.text = folders[position].fakename
+        Toast.makeText(this, folders[position].fakename, Toast.LENGTH_SHORT).show()
 
+
+        val thread = Thread(Runnable {
+            val store = get_IMAP_store(current_user!!)
+            val folder = store.getFolder(folders[position].name)
+            try {
+                folder.open(Folder.READ_ONLY)
+                var messages: Array<Message> = arrayOf()
+                if(folder.messageCount>11)
+                    messages = folder.getMessages(folder.messageCount-10, folder.messageCount)
+                else if(folder.messageCount != 0)
+                messages = folder.getMessages(1, folder.messageCount)
+
+                val fetchProfile = FetchProfile()
+                fetchProfile.add(FetchProfile.Item.ENVELOPE)
+                folder.fetch(messages, fetchProfile);
+
+                val messages_cards = cast_messages(messages, folder as UIDFolder)
+                val message_adapter = MessageAdapter(this, messages_cards, this)
+                runOnUiThread(Runnable{
+                    rv_mails.adapter = message_adapter
+                })
+                folder.close()
+            }catch(ex : FolderNotFoundException){
+                runOnUiThread(Runnable{
+                    Toast.makeText(this, "folder not found", Toast.LENGTH_SHORT).show()
+                })
+            }
+            store.close()
+        })
+        thread.start()
     }
 
     fun get_IMAP_store(user: User) : Store{
@@ -197,6 +206,77 @@ class MainActivity : AppCompatActivity() {
         }
 
         return order_folders(folder_cards.toTypedArray())
+    }
+
+    fun cast_messages(messages:Array<Message>, folder : UIDFolder) : Array<MessageCard>{
+        val res = arrayListOf<MessageCard>()
+        for(message in messages){
+            var sender_name = ""
+            var message_subject = ""
+
+            if(message.from != null && message.from.isNotEmpty()){
+                val address = (message.from[0] as InternetAddress)
+                if(address.personal!=null)
+                    sender_name = address.personal
+                else
+                    sender_name = address.address
+            }else{
+                sender_name = "me"
+            }
+
+            if(message.subject != null)
+                message_subject = message.subject
+
+            var message_text = getTextFromMessage(message).trim().replace("\n", "");
+
+            res.add(MessageCard(
+                sender_name,
+                message_subject,
+                message_text,
+                message.receivedDate,
+                folder.getUID(message)
+            ))
+        }
+        return res.toTypedArray()
+    }
+
+    @Throws(MessagingException::class, IOException::class)
+    private fun getTextFromMessage(message: Message): String {
+        var result = ""
+        if (message.isMimeType("text/plain")) {
+            result = message.content.toString()
+        } else if (message.isMimeType("multipart/*")) {
+            val mimeMultipart: MimeMultipart = message.content as MimeMultipart
+            result = getTextFromMimeMultipart(mimeMultipart)
+        }
+        return result
+    }
+
+    @Throws(MessagingException::class, IOException::class)
+    private fun getTextFromMimeMultipart(
+        mimeMultipart: MimeMultipart
+    ): String {
+        var result = ""
+        val count: Int = mimeMultipart.getCount()
+        for (i in 0 until count) {
+            val bodyPart: BodyPart = mimeMultipart.getBodyPart(i)
+            if (bodyPart.isMimeType("text/plain")) {
+                result = """
+                    $result
+                    ${bodyPart.content}
+                    """.trimIndent()
+                break // without break same text appears twice in my tests
+            } else if (bodyPart.isMimeType("text/html")) {
+                val html = bodyPart.content as String
+                result = """
+                    $result
+                    ${Jsoup.parse(html).text()}
+                    """.trimIndent()
+            } else if (bodyPart.content is MimeMultipart) {
+                result = result + getTextFromMimeMultipart(bodyPart.content as MimeMultipart)
+            }
+        }
+        return result
     }
 
 }
