@@ -6,6 +6,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
+import android.widget.Toast
 import androidx.cardview.widget.CardView
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.recyclerview.widget.RecyclerView
@@ -52,6 +53,7 @@ class MessageAdapter(var context: Context, var messages: Array<MessageCard>, var
         init{
             message_card.setOnClickListener{
                 select(adapterPosition)
+                Toast.makeText(context, messages[adapterPosition].message_uid.toString(), Toast.LENGTH_SHORT).show()
             }
         }
     }

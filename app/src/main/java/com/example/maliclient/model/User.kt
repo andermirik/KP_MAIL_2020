@@ -15,7 +15,7 @@ class User {
     var imap_server = ""
     var imap_port = 0
 
-    var smtp_login = ""
+    var smtp_server = ""
     var smtp_port = 0
 
     var enable_ssl = false
@@ -27,7 +27,7 @@ class User {
         password: String,
         imap_server: String,
         imap_port: Int,
-        smtp_login: String,
+        smtp_server: String,
         smtp_port: Int,
         enable_ssl: Boolean
     ) {
@@ -35,7 +35,7 @@ class User {
         this.password = password
         this.imap_server = imap_server
         this.imap_port = imap_port
-        this.smtp_login = smtp_login
+        this.smtp_server = smtp_server
         this.smtp_port = smtp_port
         this.enable_ssl = enable_ssl
     }
