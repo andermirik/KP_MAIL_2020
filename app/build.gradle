@@ -59,4 +59,6 @@ dependencies {
 
     implementation 'org.jsoup:jsoup:1.13.1'
 
+    //implementation 'org.apache.commons:commons-email:1.5'
+
 }

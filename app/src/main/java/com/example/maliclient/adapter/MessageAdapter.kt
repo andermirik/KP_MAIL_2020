@@ -31,14 +31,13 @@ class MessageAdapter(var context: Context, var messages: Array<MessageCard>, var
         Color.parseColor("#D84315"),
         Color.parseColor("#37474F")
     )
-    var random = Random(0xff2244)
 
     fun select(num : Int){
         if (num == RecyclerView.NO_POSITION)
             return
 
 
-        //main_activity.on_select_folder(folders, num)
+        main_activity.on_select_message(messages[num].message_uid)
     }
 
     inner class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
@@ -53,7 +52,7 @@ class MessageAdapter(var context: Context, var messages: Array<MessageCard>, var
         init{
             message_card.setOnClickListener{
                 select(adapterPosition)
-                Toast.makeText(context, messages[adapterPosition].message_uid.toString(), Toast.LENGTH_SHORT).show()
+                //Toast.makeText(context, messages[adapterPosition].message_uid.toString(), Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -92,7 +91,11 @@ class MessageAdapter(var context: Context, var messages: Array<MessageCard>, var
             11 -> smonth = "дек."
         }
 
-        val sday = if(day > 9) day .toString() else "0${day}"
+        val sday = if(day > 9) day.toString() else "0${day}"
+
+
+        val shours = if(hours > 9) hours.toString() else "0${hours}"
+        val sminutes = if(minutes > 9) minutes.toString() else "0${minutes}"
 
         val today = Calendar.getInstance()
         today.timeZone = TimeZone.getTimeZone("Europe/Moscow")
@@ -101,7 +104,7 @@ class MessageAdapter(var context: Context, var messages: Array<MessageCard>, var
         val is_yesterday = year == today[Calendar.YEAR] && month == today[Calendar.MONTH] && day == today[Calendar.DAY_OF_MONTH]-1
 
         if(is_today)
-            return "${hours}:${minutes}"
+            return "${shours}:${sminutes}"
 
         if(is_yesterday)
             return "Вчера"
@@ -116,8 +119,6 @@ class MessageAdapter(var context: Context, var messages: Array<MessageCard>, var
     }
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
-        //holder.setIsRecyclable(false)
-
         val message = messages[position]
 
         var login_text = ""
@@ -128,9 +129,9 @@ class MessageAdapter(var context: Context, var messages: Array<MessageCard>, var
             val name = message.sender_name.split(" ")
             login_text = (name[0][0].toString() + name[1][0]).toUpperCase()
         }else if(message.sender_name!="" && message.sender_name.length>1){
-            login_text = message.sender_name[0].toString() + message.sender_name[1]
+            login_text = (message.sender_name[0].toString().toUpperCase() + message.sender_name[1])
         }else if(message.sender_name!=""){
-            login_text = message.sender_name[0].toString()
+            login_text = message.sender_name[0].toString().toUpperCase()
         }
 
         holder.tv_subject.text = message.subject
@@ -138,7 +139,6 @@ class MessageAdapter(var context: Context, var messages: Array<MessageCard>, var
         holder.tv_message.text = message.body
         holder.tv_name.text = message.sender_name
         holder.tv_userlogin.text = login_text
-
 
         val color_num = Math.abs(message.sender_name.hashCode() + message.sender_name[0].toInt()) % colors.size
         holder.inner_circle.setCardBackgroundColor(colors[color_num])
