@@ -1,5 +1,6 @@
 package com.example.maliclient
 
+import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
 import android.webkit.WebSettings
@@ -138,6 +139,11 @@ class MailActivity : AppCompatActivity() {
         })
         thread.start()
 
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        (rv_attachments.adapter as AttachmentAdapter).on_result(requestCode, resultCode, data!!)
     }
 
     fun cast_attachments(attachments: List<BodyPart>) : Array<AttachmentCard>{

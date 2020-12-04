@@ -1,29 +1,27 @@
 package com.example.maliclient.adapter
 
+import android.app.Activity
+import android.app.Activity.RESULT_OK
 import android.content.Context
+import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
+import android.net.Uri
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.TextView
-import android.widget.Toast
 import androidx.cardview.widget.CardView
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.recyclerview.widget.RecyclerView
-import com.example.maliclient.MainActivity
 import com.example.maliclient.R
-import com.example.maliclient.model.AttachmentCard
-import com.example.maliclient.model.MessageCard
-import java.lang.Exception
-import java.util.*
+import java.io.IOException
 import javax.mail.BodyPart
 import javax.mail.Folder
 import javax.mail.internet.MimeUtility
-import kotlin.concurrent.thread
-import kotlin.random.Random
+
 
 class AttachmentAdapter(var context: Context, var attachments: Array<BodyPart>, var folder : Folder)
     : RecyclerView.Adapter<AttachmentAdapter.ViewHolder>() {
@@ -38,13 +36,48 @@ class AttachmentAdapter(var context: Context, var attachments: Array<BodyPart>, 
         "gif" to Color.parseColor("#6995D6"),
         "else" to Color.parseColor("#A5A4A2")
     )
-
+    var num = RecyclerView.NO_POSITION
     fun select(num : Int){
         if (num == RecyclerView.NO_POSITION)
             return
 
+        val intent = Intent(Intent.ACTION_CREATE_DOCUMENT)
+        val thread = Thread(Runnable {
+            if(!folder.isOpen)
+                folder.open(Folder.READ_ONLY)
+            intent.type = attachments[num].contentType
+            intent.putExtra(Intent.EXTRA_TITLE, MimeUtility.decodeText(attachments[num].fileName))
+            this.num = num
+            (context as Activity).startActivityForResult(intent,1)
+        })
+        thread.start()
+        thread.join()
+    }
 
-        //main_activity.on_select_message(messages[num].message_uid)
+    fun on_result(requestCode: Int, resultCode: Int, data: Intent?){
+        if(requestCode == 1 && resultCode == RESULT_OK){
+            if(num == RecyclerView.NO_POSITION)
+                return
+            val thread = Thread(Runnable {
+                try {
+                    if(!folder.isOpen)
+                        folder.open(Folder.READ_ONLY)
+                    val uri: Uri = data!!.data!!
+
+                    val outputStream = context.contentResolver.openOutputStream(uri)
+                    val buf = ByteArray(attachments[num].size)
+                    //var length: Int
+                    attachments[num].inputStream.read(buf)
+                    //while (attachments[num].inputStream.read(buf).also { length = it } > 0) {
+                        outputStream!!.write(buf, 0, attachments[num].size)
+                    //}
+                    outputStream!!.close()
+                }catch(e: IOException){
+
+                }
+            })
+            thread.start()
+        }
     }
 
     inner class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
@@ -75,8 +108,31 @@ class AttachmentAdapter(var context: Context, var attachments: Array<BodyPart>, 
         return attachments.count()
     }
 
-    fun convert_size(size: Int) : String{
-        return "13,2 МБ"
+    fun convert_size(bytes: Long) : String{
+        val kilobyte: Long = 1024
+        val megabyte = kilobyte * 1024
+        val gigabyte = megabyte * 1024
+        val terabyte = gigabyte * 1024
+
+        if ((bytes >= 0) && (bytes < kilobyte)) {
+            return "$bytes B";
+
+        } else if ((bytes >= kilobyte) && (bytes < megabyte)) {
+            return (bytes / kilobyte).toString() + " КБ";
+
+        } else if ((bytes >= megabyte) && (bytes < gigabyte)) {
+            return (bytes / megabyte).toString() + " МБ";
+
+        } else if ((bytes >= gigabyte) && (bytes < terabyte)) {
+            return (bytes / gigabyte).toString() + " ГБ";
+
+        } else if (bytes >= terabyte) {
+            return (bytes / terabyte).toString() + " ТБ";
+
+        } else {
+            return bytes.toString() + " Б"
+        }
+
     }
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
@@ -123,9 +179,9 @@ class AttachmentAdapter(var context: Context, var attachments: Array<BodyPart>, 
             holder.card_image.visibility = View.GONE
             holder.tv_filename.text = delim.subList(0, delim.size - 1)
                     .joinToString(separator = ".") { it -> it }
-            holder.tv_size.text = convert_size(attachment.size)
+            holder.tv_size.text = convert_size(attachment.size.toLong())
         }
 
-        holder.card_format.setCardBackgroundColor(colors["else"]!!)
+        holder.card_format.setCardBackgroundColor(colors[color]!!)
     }
 }
