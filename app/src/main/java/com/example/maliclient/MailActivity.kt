@@ -1,8 +1,10 @@
 package com.example.maliclient
 
+import android.content.Context
 import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
+import android.view.WindowManager
 import android.webkit.WebSettings
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
@@ -50,7 +52,6 @@ class MailActivity : AppCompatActivity() {
             finish()
         }
 
-        //webview.setInitialScale(30)
         //webview.settings.setRenderPriority(WebSettings.RenderPriority.HIGH)
         //webview.settings.cacheMode = WebSettings.LOAD_CACHE_ELSE_NETWORK
         webview.settings.useWideViewPort = true
@@ -67,6 +68,9 @@ class MailActivity : AppCompatActivity() {
         webview.isScrollbarFadingEnabled=false
         webview.isHorizontalScrollBarEnabled=false
         webview.isVerticalScrollBarEnabled=false
+        webview.settings.defaultFontSize = 40
+        webview.settings.minimumFontSize=14
+        webview.settings.minimumLogicalFontSize=14
 
         val db = Room.databaseBuilder(
             applicationContext,
@@ -143,7 +147,11 @@ class MailActivity : AppCompatActivity() {
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        (rv_attachments.adapter as AttachmentAdapter).on_result(requestCode, resultCode, data!!)
+        try{
+            (rv_attachments.adapter as AttachmentAdapter).on_result(requestCode, resultCode, data!!)
+        }catch (e: Exception){
+
+        }
     }
 
     fun cast_attachments(attachments: List<BodyPart>) : Array<AttachmentCard>{

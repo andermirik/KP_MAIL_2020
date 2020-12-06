@@ -9,6 +9,7 @@ import android.view.View
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import androidx.room.Room
 import com.example.maliclient.adapter.FolderAdapter
 import com.example.maliclient.adapter.MessageAdapter
@@ -82,6 +83,31 @@ class MainActivity : AppCompatActivity(){
         swipe_refresh.setOnRefreshListener {
             load_messages(current_folder)
         }
+
+
+        rv_mails.addOnScrollListener(object : RecyclerView.OnScrollListener() {
+            override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
+                if (dy > 0 || dy < 0 && fab.isShown) {
+                    fab.hide()
+                }
+            }
+
+            override fun onScrollStateChanged(recyclerView: RecyclerView, newState: Int) {
+                if (newState == RecyclerView.SCROLL_STATE_IDLE) {
+                    fab.show()
+                }
+                super.onScrollStateChanged(recyclerView, newState)
+            }
+        })
+
+        fab.setOnClickListener{
+            if(current_user!= null) {
+                val intent = Intent(this, SendMailActivity::class.java)
+                intent.putExtra("user_login", current_user!!.login)
+                startActivity(intent)
+            }
+        }
+
 
     }
 
@@ -220,6 +246,7 @@ class MainActivity : AppCompatActivity(){
     fun get_IMAP_store(user: User) : Store{
         val prop_imap = Properties()
         prop_imap.put("mail.store.protocol", "imaps")
+        prop_imap["mail.imap.port"] = user.imap_port
         if(user.enable_ssl) {
             prop_imap["mail.imap.ssl.enable"] = "true"
         }
