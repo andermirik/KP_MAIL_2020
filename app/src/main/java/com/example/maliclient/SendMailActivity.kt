@@ -5,6 +5,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.provider.OpenableColumns
+import android.util.Base64
 import android.util.Log
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
@@ -54,8 +55,10 @@ class SendMailActivity : AppCompatActivity() {
             val text_to_send = "<style>$css</style><body>$html</body>"
 
             val thread = Thread(Runnable {
-                sign_data(text_to_send)
                 try {
+                    if(sw_sign.isChecked)
+                        sign_data(text_to_send)
+
                     val prop_smtp = Properties()
                     prop_smtp["mail.smtp.auth"] = "true"
                     prop_smtp["mail.smtp.port"] = user.smtp_port
@@ -83,7 +86,7 @@ class SendMailActivity : AppCompatActivity() {
 
                     message.setContent(multipart)
 
-                    //transport.sendMessage(message, InternetAddress.parse(send_to))
+                    transport.sendMessage(message, InternetAddress.parse(send_to))
                 }catch(e: MessagingException){
                     Log.d("TAG", e.toString())
                 }
@@ -94,8 +97,6 @@ class SendMailActivity : AppCompatActivity() {
             })
 
             thread.start()
-
-
         }
 
         btn_attach.setOnClickListener{
@@ -110,25 +111,36 @@ class SendMailActivity : AppCompatActivity() {
         }
     }
 
-    fun sign_data(text: String) : ByteArray{
-        val data = text.toByteArray()
+    fun sign_data(text: String){
+        val data = text.toByteArray(Charsets.UTF_8)
         try {
-            val keyGen: KeyPairGenerator = KeyPairGenerator.getInstance("DSA")
+            val keyGen: KeyPairGenerator = KeyPairGenerator.getInstance("RSA")
             keyGen.initialize(1024, SecureRandom())
             val pair: KeyPair = keyGen.generateKeyPair()
+            val private = pair.private
+            val public = pair.public
 
-            val dsa: Signature = Signature.getInstance("MD5/DSA")
+            val rsa: Signature = Signature.getInstance("MD5withRSA")
+            rsa.initSign(private)
+            rsa.update(data)
+            val sig = rsa.sign()
 
-            val priv: PrivateKey = pair.getPrivate()
-            dsa.initSign(priv)
+            val key_attachment: BodyPart = MimeBodyPart()
+            val key_source: DataSource = ByteArrayDataSource(public.encoded, "application/octet-stream")
+            key_attachment.dataHandler = DataHandler(key_source)
+            key_attachment.fileName = "sign-public.key"
 
-            dsa.update(data)
-            val sig: ByteArray = dsa.sign()
-            return sig
+            val sign_attachment: BodyPart = MimeBodyPart()
+            val sign_source: DataSource = ByteArrayDataSource(Base64.encode(sig, 0), "application/octet-stream")
+            sign_attachment.dataHandler = DataHandler(sign_source)
+            sign_attachment.fileName = "sign.sign"
+
+            attachments.add(key_attachment)
+            attachments.add(sign_attachment)
+
         } catch (e: Exception) {
             Log.d("tag", e.toString())
         }
-        return byteArrayOf()
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {

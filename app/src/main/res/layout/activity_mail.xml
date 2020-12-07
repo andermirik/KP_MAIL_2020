@@ -78,12 +78,14 @@
 
                 <TextView
                     android:id="@+id/tv_subject"
-                    android:text="RE: sample subject from your mom"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginStart="16dp"
                     android:layout_marginTop="8dp"
                     android:layout_marginEnd="16dp"
+                    android:text="RE: sample subject from your mom"
+                    android:singleLine="true"
+                    android:ellipsize="end"
                     android:textColor="#000000"
                     android:textSize="16sp"
                     app:layout_constraintEnd_toEndOf="parent"
@@ -187,6 +189,33 @@
                     app:layout_constraintStart_toStartOf="parent"
                     app:layout_constraintTop_toBottomOf="@+id/cardView3"
                     tools:text="Сегодня, 11:28" />
+
+                <TextView
+                    android:visibility="gone"
+                    android:id="@+id/tv_signed"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:layout_marginEnd="16dp"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    app:layout_constraintTop_toBottomOf="@+id/cardView3"
+                    android:text="Верифицировано!"
+                    android:textColor="#4CAF50"
+                    />
+
+                <TextView
+                    android:visibility="gone"
+                    android:id="@+id/tv_unsigned"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:layout_marginEnd="16dp"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    app:layout_constraintTop_toBottomOf="@+id/cardView3"
+                    android:text="Содержимое подменено!"
+                    android:textColor="#F50031"
+                    />
+
 
                 <androidx.recyclerview.widget.RecyclerView
                     android:id="@+id/rv_attachments"

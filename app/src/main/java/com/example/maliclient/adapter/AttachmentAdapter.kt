@@ -34,6 +34,7 @@ class AttachmentAdapter(var context: Context, var attachments: Array<BodyPart>, 
         "jpg" to Color.parseColor("#6995D6"),
         "jpeg" to Color.parseColor("#6995D6"),
         "gif" to Color.parseColor("#6995D6"),
+        "key" to Color.parseColor("#FFFFC107"),
         "else" to Color.parseColor("#A5A4A2")
     )
     var num = RecyclerView.NO_POSITION

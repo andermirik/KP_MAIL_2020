@@ -1,10 +1,12 @@
 package com.example.maliclient
 
-import android.content.Context
 import android.content.Intent
 import android.graphics.Color
+import android.opengl.Visibility
 import android.os.Bundle
-import android.view.WindowManager
+import android.util.Base64
+import android.util.Xml
+import android.view.View
 import android.webkit.WebSettings
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
@@ -13,7 +15,14 @@ import com.example.maliclient.adapter.AttachmentAdapter
 import com.example.maliclient.model.AttachmentCard
 import com.example.maliclient.model.User
 import kotlinx.android.synthetic.main.activity_mail.*
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
 import java.io.IOException
+import java.nio.charset.Charset
+import java.nio.charset.StandardCharsets.UTF_8
+import java.security.KeyFactory
+import java.security.Signature
+import java.security.spec.X509EncodedKeySpec
 import java.util.*
 import javax.mail.*
 import javax.mail.internet.ContentType
@@ -54,8 +63,8 @@ class MailActivity : AppCompatActivity() {
 
         //webview.settings.setRenderPriority(WebSettings.RenderPriority.HIGH)
         //webview.settings.cacheMode = WebSettings.LOAD_CACHE_ELSE_NETWORK
-        webview.settings.useWideViewPort = true
-        webview.settings.loadWithOverviewMode = true
+        webview.settings.useWideViewPort = false
+        webview.settings.loadWithOverviewMode = false
         webview.settings.layoutAlgorithm = WebSettings.LayoutAlgorithm.TEXT_AUTOSIZING
         webview.settings.supportZoom()
         webview.settings.builtInZoomControls = true
@@ -68,9 +77,9 @@ class MailActivity : AppCompatActivity() {
         webview.isScrollbarFadingEnabled=false
         webview.isHorizontalScrollBarEnabled=false
         webview.isVerticalScrollBarEnabled=false
-        webview.settings.defaultFontSize = 40
-        webview.settings.minimumFontSize=14
-        webview.settings.minimumLogicalFontSize=14
+        webview.settings.defaultFontSize = 28
+        webview.settings.minimumFontSize=28
+        webview.settings.minimumLogicalFontSize=28
 
         val db = Room.databaseBuilder(
             applicationContext,
@@ -128,11 +137,15 @@ class MailActivity : AppCompatActivity() {
 
             val html: String = getTextFromMessage(message)
             runOnUiThread{
-                webview.loadData(html, "text/html; charset=utf-8", "UTF-8")
+                val base64version: String =
+                    Base64.encodeToString(html.toByteArray(), Base64.DEFAULT)
+                webview.loadData(base64version, "text/html; charset=UTF-8", "base64")
+                //webview.loadData(html, "text/html; charset=utf-8", "UTF-8")
             }
 
             attachments = getAttachments(message)
 
+            check_sign(html)
             runOnUiThread{
                 rv_attachments.adapter = AttachmentAdapter(this, attachments.toTypedArray(), folder)
             }
@@ -143,6 +156,50 @@ class MailActivity : AppCompatActivity() {
         })
         thread.start()
 
+    }
+
+    fun check_sign(text_html: String){
+        try{
+            var sign_attachment: BodyPart? = null
+            var key_attachment: BodyPart? = null
+
+            for(attachment in attachments){
+                if(attachment.fileName=="sign.sign")
+                    sign_attachment = attachment
+                else if(attachment.fileName=="sign-public.key")
+                    key_attachment=attachment
+            }
+
+            if(sign_attachment!= null && key_attachment!= null){
+                val buf = ByteArray(key_attachment.size)
+                key_attachment.inputStream.read(buf, 0, key_attachment.size)
+
+                val X509publicKey = X509EncodedKeySpec(buf)
+                val kf: KeyFactory = KeyFactory.getInstance("RSA")
+                val pub = kf.generatePublic(X509publicKey)
+
+                val rsa: Signature = Signature.getInstance("MD5withRSA")
+                rsa.initVerify(pub)
+                val data = text_html.replace("\r\n", "\n").toByteArray(Charsets.UTF_8)
+                rsa.update(data)
+
+                val sign_buf = ByteArray(key_attachment.size)
+                sign_attachment.inputStream.read(sign_buf, 0, key_attachment.size)
+
+                val verifies: Boolean = rsa.verify(Base64.decode(sign_buf, 0))
+
+                runOnUiThread{
+                    if(verifies){
+                        tv_signed.visibility = View.VISIBLE
+                    }else{
+                        tv_unsigned.visibility = View.INVISIBLE
+                    }
+                }
+            }
+        }catch(e: Exception){
+
+        }
+        return
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
