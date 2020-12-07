@@ -8,6 +8,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.net.Uri
+import android.util.Base64
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -23,17 +24,25 @@ import com.example.maliclient.R
 import com.example.maliclient.model.User
 import com.example.maliclient.model.UserKeysDb
 import java.io.IOException
+import java.io.InputStream
+import java.nio.charset.StandardCharsets
 import java.security.KeyFactory
 import java.security.KeyPair
 import java.security.KeyPairGenerator
 import java.security.SecureRandom
+import java.security.spec.PKCS8EncodedKeySpec
 import java.security.spec.X509EncodedKeySpec
+import java.util.*
+import javax.crypto.Cipher
+import javax.crypto.spec.IvParameterSpec
+import javax.crypto.spec.SecretKeySpec
 import javax.mail.BodyPart
 import javax.mail.Folder
 import javax.mail.internet.MimeUtility
+import kotlin.text.Charsets.UTF_8
 
 
-class AttachmentAdapter(var context: Context, var attachments: Array<BodyPart>, var folder : Folder, var username: String)
+class AttachmentAdapter(var context: Context, var attachments: Array<BodyPart>, var folder : Folder, var username: String, var current_username: String)
     : RecyclerView.Adapter<AttachmentAdapter.ViewHolder>() {
 
     var colors = mapOf(
@@ -47,10 +56,25 @@ class AttachmentAdapter(var context: Context, var attachments: Array<BodyPart>, 
         "key" to Color.parseColor("#FFFFC107"),
         "else" to Color.parseColor("#A5A4A2")
     )
+    var is_aes = false
     var num = RecyclerView.NO_POSITION
     fun select(num : Int){
         if (num == RecyclerView.NO_POSITION)
             return
+
+        if(attachments[num].fileName == "aes-${username}.key")
+            return
+        if(attachments[num].fileName == "sign-public.key")
+            return
+        if(attachments[num].fileName == "sign.sign")
+           return
+
+
+        for(attachment in attachments){
+            if(attachment.fileName=="aes-${username}.key"){
+                is_aes = true
+            }
+        }
 
         if(attachments[num].fileName=="public-${username}.key"){
             val db = Room.databaseBuilder(
@@ -60,15 +84,18 @@ class AttachmentAdapter(var context: Context, var attachments: Array<BodyPart>, 
                 .allowMainThreadQueries()
                 .build()
 
-            if(db.userkeysDao().getByLogin(username).isEmpty()) {
+            if(db.userkeysDao().getByLogin(username, current_username).isEmpty()) {
                 val buf = ByteArray(attachments[num].size)
-                attachments[num].inputStream.read(buf, 0, attachments[num].size)
+                val thread = Thread(Runnable {
+                    attachments[num].inputStream.read(buf, 0, attachments[num].size)
+                    val X509publicKey = X509EncodedKeySpec(buf)
+                    val kf: KeyFactory = KeyFactory.getInstance("RSA")
+                    val public = kf.generatePublic(X509publicKey)
 
-                val X509publicKey = X509EncodedKeySpec(buf)
-                val kf: KeyFactory = KeyFactory.getInstance("RSA")
-                val public = kf.generatePublic(X509publicKey)
-
-                db.userkeysDao().insertAll(UserKeysDb(username, public.encoded, byteArrayOf()))
+                    db.userkeysDao().insertAll(UserKeysDb(username, current_username, public.encoded, byteArrayOf()))
+                })
+                thread.start()
+                thread.join()
                 Toast.makeText(context, "ключ сохранён", Toast.LENGTH_SHORT).show()
             }
             else {
@@ -100,19 +127,87 @@ class AttachmentAdapter(var context: Context, var attachments: Array<BodyPart>, 
                     val uri: Uri = data!!.data!!
 
                     val outputStream = context.contentResolver.openOutputStream(uri)
-                    val buf = ByteArray(attachments[num].size)
-                    //var length: Int
-                    attachments[num].inputStream.read(buf)
-                    //while (attachments[num].inputStream.read(buf).also { length = it } > 0) {
-                        outputStream!!.write(buf, 0, attachments[num].size)
-                    //}
-                    outputStream!!.close()
+                    if(outputStream!= null) {
+                        var buf_i = attachments[num].inputStream.readBytes()
+                        if(is_aes){
+
+                            val db = Room.databaseBuilder(
+                                context,
+                                AppDatabase::class.java, "database"
+                            ).allowMainThreadQueries().build()
+
+                            var aes_key = byteArrayOf()
+                            for (attachment in attachments) {
+                                if (attachment.fileName == "aes-${username}.key")
+                                    aes_key = Base64.decode(attachment.inputStream.readBytes().toString(
+                                        StandardCharsets.UTF_8
+                                    ).replace("\r\n", ""), 0)
+                            }
+
+                            val buf = db.userkeysDao().getByLogin(current_username, current_username)[0].private_key
+                            val private_spec = PKCS8EncodedKeySpec(buf)
+                            val kf: KeyFactory = KeyFactory.getInstance("RSA")
+                            val private = kf.generatePrivate(private_spec)
+
+                            val RSA =
+                                Cipher.getInstance("RSA/ECB/NoPadding")
+                            RSA.init(Cipher.DECRYPT_MODE, private)
+                            val key = Arrays.copyOfRange(RSA.doFinal(aes_key), 112, 128).toString(Charsets.UTF_8)
+                            val d = decrypt(key, key, attachments[num].inputStream)
+                            buf_i = d
+                        }
+                        outputStream.write(buf_i, 0, buf_i.size)
+                        outputStream.close()
+                    }
                 }catch(e: IOException){
 
                 }
             })
             thread.start()
+            thread.join()
         }
+    }
+
+    fun decrypt(
+        key: String,
+        initVector: String,
+        encrypted: String
+    ): String {
+        try {
+            val iv = IvParameterSpec(initVector.toByteArray(charset("UTF-8")))
+            val skeySpec =
+                SecretKeySpec(key.toByteArray(charset("UTF-8")), "AES")
+            val cipher =
+                Cipher.getInstance("AES/CBC/PKCS5PADDING")
+            cipher.init(Cipher.DECRYPT_MODE, skeySpec, iv)
+            val original =
+                cipher.doFinal(Base64.decode(encrypted, 0))
+            return String(original)
+        } catch (ex: java.lang.Exception) {
+            ex.printStackTrace()
+        }
+        return ""
+    }
+
+    fun decrypt(
+        key: String,
+        initVector: String,
+        encrypted: InputStream
+    ): ByteArray {
+        try {
+            val iv = IvParameterSpec(initVector.toByteArray(charset("UTF-8")))
+            val skeySpec =
+                SecretKeySpec(key.toByteArray(charset("UTF-8")), "AES")
+            val cipher =
+                Cipher.getInstance("AES/CBC/PKCS5PADDING")
+            cipher.init(Cipher.DECRYPT_MODE, skeySpec, iv)
+            val original =
+                cipher.doFinal(encrypted.readBytes())
+            return original
+        } catch (ex: java.lang.Exception) {
+            ex.printStackTrace()
+        }
+        return byteArrayOf()
     }
 
     inner class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
@@ -171,7 +266,7 @@ class AttachmentAdapter(var context: Context, var attachments: Array<BodyPart>, 
     }
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
-        holder.setIsRecyclable(false)
+        holder.setIsRecyclable(true)
         val attachment = attachments[position]
         var format = ""
         var color = "else"
@@ -193,7 +288,40 @@ class AttachmentAdapter(var context: Context, var attachments: Array<BodyPart>, 
             is_img = format in arrayOf("png", "jpg", "bmp", "jpeg", "gif")
 
             if(is_img){
-                bitmap = BitmapFactory.decodeStream(attachment.inputStream)
+                for(attachment in attachments){
+                    if(attachment.fileName=="aes-${username}.key"){
+                        is_aes = true
+                    }
+                }
+                if(is_aes){
+                    val db = Room.databaseBuilder(
+                        context,
+                        AppDatabase::class.java, "database"
+                    ).allowMainThreadQueries().build()
+
+                    var aes_key = byteArrayOf()
+                    for (attachment in attachments) {
+                        if (attachment.fileName == "aes-${username}.key")
+                            aes_key = Base64.decode(attachment.inputStream.readBytes().toString(
+                                StandardCharsets.UTF_8
+                            ).replace("\r\n", ""), 0)
+                    }
+
+                    val buf = db.userkeysDao().getByLogin(current_username, current_username)[0].private_key
+                    val private_spec = PKCS8EncodedKeySpec(buf)
+                    val kf: KeyFactory = KeyFactory.getInstance("RSA")
+                    val private = kf.generatePrivate(private_spec)
+
+                    val RSA =
+                        Cipher.getInstance("RSA/ECB/NoPadding")
+                    RSA.init(Cipher.DECRYPT_MODE, private)
+                    val key = Arrays.copyOfRange(RSA.doFinal(aes_key), 112, 128).toString(Charsets.UTF_8)
+                    val d = decrypt(key, key, attachments[position].inputStream)
+                    bitmap = BitmapFactory.decodeByteArray(d, 0, d.size)
+                }
+                else {
+                    bitmap = BitmapFactory.decodeStream(attachment.inputStream)
+                }
             }
         })
 

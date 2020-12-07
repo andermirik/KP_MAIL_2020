@@ -22,13 +22,17 @@ import java.nio.charset.Charset
 import java.nio.charset.StandardCharsets.UTF_8
 import java.security.KeyFactory
 import java.security.Signature
+import java.security.spec.PKCS8EncodedKeySpec
 import java.security.spec.X509EncodedKeySpec
 import java.util.*
+import javax.activation.DataHandler
+import javax.activation.DataSource
+import javax.crypto.Cipher
+import javax.crypto.spec.IvParameterSpec
+import javax.crypto.spec.SecretKeySpec
 import javax.mail.*
-import javax.mail.internet.ContentType
-import javax.mail.internet.InternetAddress
-import javax.mail.internet.MimeMultipart
-import javax.mail.internet.MimeUtility
+import javax.mail.internet.*
+import javax.mail.util.ByteArrayDataSource
 import kotlin.collections.ArrayList
 
 
@@ -48,6 +52,10 @@ class MailActivity : AppCompatActivity() {
     )
 
     lateinit var attachments : List<BodyPart>
+
+    lateinit var db : AppDatabase
+    lateinit var user: User
+    var sender_name = ""
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -81,14 +89,14 @@ class MailActivity : AppCompatActivity() {
         webview.settings.minimumFontSize=28
         webview.settings.minimumLogicalFontSize=28
 
-        val db = Room.databaseBuilder(
+        db = Room.databaseBuilder(
             applicationContext,
             AppDatabase::class.java, "database"
         )
             .allowMainThreadQueries()
             .build()
 
-        val user = db.userDao().getByLogin(username!!)[0]
+        user = db.userDao().getByLogin(username!!)[0]
         var sender_mail = ""
         val thread = Thread(Runnable {
             val store = get_IMAP_store(user)
@@ -96,7 +104,7 @@ class MailActivity : AppCompatActivity() {
             folder.open(Folder.READ_ONLY)
             val message = (folder as UIDFolder).getMessageByUID(message_uid)
 
-            var sender_name = ""
+
             var message_subject = ""
             val date: Date = message.receivedDate
 
@@ -139,8 +147,11 @@ class MailActivity : AppCompatActivity() {
 
                 user_card.setCardBackgroundColor(colors[color_num])
             }
+            attachments = getAttachments(message)
+            var html: String = getTextFromMessage(message)
 
-            val html: String = getTextFromMessage(message)
+            html = decrypt(html)
+
             runOnUiThread{
                 val base64version: String =
                     Base64.encodeToString(html.toByteArray(), Base64.DEFAULT)
@@ -148,11 +159,13 @@ class MailActivity : AppCompatActivity() {
                 //webview.loadData(html, "text/html; charset=utf-8", "UTF-8")
             }
 
-            attachments = getAttachments(message)
+
 
             check_sign(html)
+
+
             runOnUiThread{
-                rv_attachments.adapter = AttachmentAdapter(this, attachments.toTypedArray(), folder, sender_mail)
+                rv_attachments.adapter = AttachmentAdapter(this, attachments.toTypedArray(), folder, sender_mail, user.login)
             }
 
             //folder.close()
@@ -161,6 +174,83 @@ class MailActivity : AppCompatActivity() {
         })
         thread.start()
 
+    }
+
+    fun decrypt(text_html: String) : String {
+        var aes_key = byteArrayOf()
+        for (attachment in attachments) {
+            if (attachment.fileName == "aes-${sender_name}.key")
+                aes_key = Base64.decode(attachment.inputStream.readBytes().toString(UTF_8).replace("\r\n", ""), 0)
+        }
+
+        if(aes_key.isNotEmpty()){
+            val buf = db.userkeysDao().getByLogin(user.login, user.login)[0].private_key
+            val private_spec = PKCS8EncodedKeySpec(buf)
+            val kf: KeyFactory = KeyFactory.getInstance("RSA")
+            val private = kf.generatePrivate(private_spec)
+
+            val RSA =
+                Cipher.getInstance("RSA/ECB/NoPadding")
+            RSA.init(Cipher.DECRYPT_MODE, private)
+            val key = Arrays.copyOfRange(RSA.doFinal(aes_key), 112, 128).toString(Charsets.UTF_8)
+            return decrypt(key, key, text_html.replace("\r\n", ""))
+        }else{
+            return text_html
+        }
+    }
+    //for(attachment in attachments){
+        //if(attachment.fileName == "aes-${sender_name}.key")
+        //    continue
+        //if(attachment.fileName == "sign-public.key")
+        //    continue
+        //if(attachment.fileName == "sign.sign")
+        //   continue
+
+        //val data = attachment.inputStream.readBytes().toString(UTF_8)
+    //}
+
+    //attachments.add(aes_key_attachment)
+
+
+    fun encrypt(
+        key: String,
+        initVector: String,
+        value: String
+    ): String {
+        try {
+            val cipher =
+                Cipher.getInstance("AES/CBC/PKCS5PADDING")
+            val iv = IvParameterSpec(initVector.toByteArray(charset("UTF-8")))
+            val skeySpec =
+                SecretKeySpec(key.toByteArray(charset("UTF-8")), "AES")
+            cipher.init(Cipher.ENCRYPT_MODE, skeySpec, iv)
+            val encrypted = cipher.doFinal(value.toByteArray())
+            return String(Base64.encode(encrypted, 0))
+        } catch (ex: java.lang.Exception) {
+            ex.printStackTrace()
+        }
+        return ""
+    }
+
+    fun decrypt(
+        key: String,
+        initVector: String,
+        encrypted: String
+    ): String {
+        try {
+            val iv = IvParameterSpec(initVector.toByteArray(charset("UTF-8")))
+            val skeySpec =
+                SecretKeySpec(key.toByteArray(charset("UTF-8")), "AES")
+            val cipher =
+                Cipher.getInstance("AES/CBC/PKCS5PADDING")
+            cipher.init(Cipher.DECRYPT_MODE, skeySpec, iv)
+            val original =
+                cipher.doFinal(Base64.decode(encrypted, 0))
+            return String(original)
+        } catch (ex: java.lang.Exception) {
+            ex.printStackTrace()
+        }
+        return ""
     }
 
     fun check_sign(text_html: String){

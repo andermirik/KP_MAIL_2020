@@ -11,8 +11,8 @@ interface UserKeysDbDao {
     @Query("SELECT * FROM userkeysdb")
     fun getAll(): List<UserKeysDb>
 
-    @Query("SELECT * FROM userkeysdb WHERE user_login LIKE :user_login")
-    fun getByLogin(user_login : String) : List<UserKeysDb>
+    @Query("SELECT * FROM userkeysdb WHERE user_login LIKE :user_login AND current_user_login LIKE :curent_user_login")
+    fun getByLogin(user_login : String, curent_user_login: String) : List<UserKeysDb>
 
     @Insert
     fun insertAll(vararg user_keys: UserKeysDb)

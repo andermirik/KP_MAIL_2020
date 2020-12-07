@@ -10,24 +10,26 @@ import android.util.Log
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.room.Room
-import androidx.room.RoomDatabase
 import com.commonsware.cwac.anddown.AndDown
 import com.example.maliclient.adapter.OutAttachmentAdapter
 import com.example.maliclient.model.User
 import com.example.maliclient.model.UserKeysDb
 import kotlinx.android.synthetic.main.activity_send_mail.*
+import java.io.InputStream
 import java.security.*
 import java.security.spec.X509EncodedKeySpec
 import java.util.*
 import javax.activation.DataHandler
 import javax.activation.DataSource
+import javax.crypto.Cipher
+import javax.crypto.spec.IvParameterSpec
+import javax.crypto.spec.SecretKeySpec
 import javax.mail.*
 import javax.mail.internet.InternetAddress
 import javax.mail.internet.MimeBodyPart
 import javax.mail.internet.MimeMessage
 import javax.mail.internet.MimeMultipart
 import javax.mail.util.ByteArrayDataSource
-import kotlin.math.sign
 
 
 class SendMailActivity : AppCompatActivity() {
@@ -56,10 +58,51 @@ class SendMailActivity : AppCompatActivity() {
             val text = edit_text.text.toString()
 
             val html = AndDown().markdownToHtml(text)
-            val text_to_send = "<style>$css</style><body>$html</body>"
+            var text_to_send = "<style>$css</style><body>$html</body>"
 
             val thread = Thread(Runnable {
                 try {
+                    if(sw_crypt.isChecked){
+                        val key = getRandomString(16)  // 128 bit key
+                        text_to_send = encrypt(key, key, text_to_send)
+
+                        for(attachment in attachments){
+                            val bytes = attachment.inputStream.readBytes().toString(Charsets.UTF_8)
+                            val res = encrypt(key, key, attachment.inputStream)
+                            attachment.dataHandler = DataHandler(
+                                ByteArrayDataSource(res, "application/octet-stream")
+                            )
+                        }
+
+                        var public: PublicKey? = null
+                        if(db.userkeysDao().getByLogin(send_to, user.login).isNotEmpty()){
+                            val buf = db.userkeysDao().getByLogin(send_to, user.login)[0].public_key
+                            val X509publicKey = X509EncodedKeySpec(buf)
+                            val kf: KeyFactory = KeyFactory.getInstance("RSA")
+                            public = kf.generatePublic(X509publicKey)
+
+                            val RSA =
+                                Cipher.getInstance("RSA/ECB/NoPadding")
+                            RSA.init(Cipher.ENCRYPT_MODE, public)
+
+                            val key_crypted = RSA.doFinal(key.toByteArray())
+
+                            val aes_key_attachment: BodyPart = MimeBodyPart()
+                            val aes_key_source: DataSource = ByteArrayDataSource(Base64.encode(key_crypted, 0), "application/octet-stream")
+                            aes_key_attachment.dataHandler = DataHandler(aes_key_source)
+                            aes_key_attachment.fileName = "aes-${user.login}.key"
+
+                            attachments.add(aes_key_attachment)
+
+                        }else{
+                            runOnUiThread{
+                                Toast.makeText(this, "не удалось зашифровать содержимое.\nНеобходим публичный ключ получателя", Toast.LENGTH_LONG).show()
+                            }
+                        }
+
+
+                    }
+
                     if(sw_sign.isChecked)
                         sign_data(text_to_send)
 
@@ -101,6 +144,7 @@ class SendMailActivity : AppCompatActivity() {
             })
 
             thread.start()
+            thread.join()
         }
 
         btn_attach.setOnClickListener{
@@ -116,22 +160,22 @@ class SendMailActivity : AppCompatActivity() {
 
         btn_key_attachment.setOnClickListener{
             var public: PublicKey? = null
-            if(db.userkeysDao().getByLogin(user.login).isEmpty()){
+            if(db.userkeysDao().getByLogin(user.login, user.login).isEmpty()){
                 val keyGen: KeyPairGenerator = KeyPairGenerator.getInstance("RSA")
                 keyGen.initialize(1024, SecureRandom())
                 val pair: KeyPair = keyGen.generateKeyPair()
                 public = pair.public
                 val private = pair.private
-                db.userkeysDao().insertAll(UserKeysDb(user.login, public.encoded, private.encoded))
+                db.userkeysDao().insertAll(UserKeysDb(user.login, user.login, public!!.encoded, private.encoded))
             }else{
-                val buf = db.userkeysDao().getByLogin(user.login)[0].public_key
+                val buf = db.userkeysDao().getByLogin(user.login, user.login)[0].public_key
                 val X509publicKey = X509EncodedKeySpec(buf)
                 val kf: KeyFactory = KeyFactory.getInstance("RSA")
                 public = kf.generatePublic(X509publicKey)
             }
 
             val public_key_attachment: BodyPart = MimeBodyPart()
-            val public_key_source: DataSource = ByteArrayDataSource(public.encoded, "application/octet-stream")
+            val public_key_source: DataSource = ByteArrayDataSource(public!!.encoded, "application/octet-stream")
             public_key_attachment.dataHandler = DataHandler(public_key_source)
             public_key_attachment.fileName = "public-${user.login}.key"
 
@@ -140,6 +184,75 @@ class SendMailActivity : AppCompatActivity() {
         }
 
     }
+
+    fun getRandomString(length: Int) : String {
+        val allowedChars = ('A'..'Z') + ('a'..'z') + ('0'..'9')
+        return (1..length)
+            .map { allowedChars.random() }
+            .joinToString("")
+    }
+
+    fun encrypt(
+        key: String,
+        initVector: String,
+        value: String
+    ): String {
+        try {
+            val cipher =
+                Cipher.getInstance("AES/CBC/PKCS5PADDING")
+            val iv = IvParameterSpec(initVector.toByteArray(charset("UTF-8")))
+            val skeySpec =
+                SecretKeySpec(key.toByteArray(charset("UTF-8")), "AES")
+            cipher.init(Cipher.ENCRYPT_MODE, skeySpec, iv)
+            val encrypted = cipher.doFinal(value.toByteArray())
+            return String(Base64.encode(encrypted, 0))
+        } catch (ex: java.lang.Exception) {
+            ex.printStackTrace()
+        }
+        return ""
+    }
+
+    fun encrypt(
+        key: String,
+        initVector: String,
+        value: InputStream
+    ): ByteArray {
+        try {
+            val cipher =
+                Cipher.getInstance("AES/CBC/PKCS5PADDING")
+            val iv = IvParameterSpec(initVector.toByteArray(charset("UTF-8")))
+            val skeySpec =
+                SecretKeySpec(key.toByteArray(charset("UTF-8")), "AES")
+            cipher.init(Cipher.ENCRYPT_MODE, skeySpec, iv)
+            val encrypted = cipher.doFinal(value.readBytes())
+            return encrypted
+        } catch (ex: java.lang.Exception) {
+            ex.printStackTrace()
+        }
+        return byteArrayOf()
+    }
+
+    fun decrypt(
+        key: String,
+        initVector: String,
+        encrypted: String
+    ): String? {
+        try {
+            val iv = IvParameterSpec(initVector.toByteArray(charset("UTF-8")))
+            val skeySpec =
+                SecretKeySpec(key.toByteArray(charset("UTF-8")), "AES")
+            val cipher =
+                Cipher.getInstance("AES/CBC/PKCS5PADDING")
+            cipher.init(Cipher.DECRYPT_MODE, skeySpec, iv)
+            val original =
+                cipher.doFinal(Base64.decode(encrypted, 0))
+            return String(original)
+        } catch (ex: java.lang.Exception) {
+            ex.printStackTrace()
+        }
+        return ""
+    }
+
 
     fun sign_data(text: String){
         val data = text.toByteArray(Charsets.UTF_8)
