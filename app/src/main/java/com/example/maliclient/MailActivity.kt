@@ -89,6 +89,7 @@ class MailActivity : AppCompatActivity() {
             .build()
 
         val user = db.userDao().getByLogin(username!!)[0]
+        var sender_mail = ""
         val thread = Thread(Runnable {
             val store = get_IMAP_store(user)
             val folder = store.getFolder(folder_name)
@@ -101,7 +102,8 @@ class MailActivity : AppCompatActivity() {
 
             if(message.from != null && message.from.isNotEmpty()){
                 val address = (message.from[0] as InternetAddress)
-                if(address.personal!=null)
+                sender_mail = address.address
+                if(address.personal!=null && address.personal.isNotBlank())
                     sender_name = address.personal
                 else
                     sender_name = address.address
@@ -125,13 +127,16 @@ class MailActivity : AppCompatActivity() {
             if(message.subject != null)
                 message_subject = message.subject
 
-            val color_num = Math.abs(sender_name.hashCode() + sender_name[0].toInt()) % colors.size
+            var color_num = 0
+            if(sender_name.isNotBlank())
+                color_num = Math.abs(sender_name.hashCode() + sender_name[0].toInt()) % colors.size
 
             runOnUiThread{
                 findViewById<TextView>(R.id.tv_subject).text = message.subject
                 tv_from.text = sender_name
                 tv_userlogin.text = login_text
                 tv_time.text = cast_date(date)
+
                 user_card.setCardBackgroundColor(colors[color_num])
             }
 
@@ -147,7 +152,7 @@ class MailActivity : AppCompatActivity() {
 
             check_sign(html)
             runOnUiThread{
-                rv_attachments.adapter = AttachmentAdapter(this, attachments.toTypedArray(), folder)
+                rv_attachments.adapter = AttachmentAdapter(this, attachments.toTypedArray(), folder, sender_mail)
             }
 
             //folder.close()
@@ -276,7 +281,7 @@ class MailActivity : AppCompatActivity() {
         if (message.isMimeType("text/plain")) {
             result = message.content.toString()
             runOnUiThread{
-                webview.settings.minimumLogicalFontSize=40
+                webview.settings.minimumLogicalFontSize=28
             }
         }
         else if (message.isMimeType("multipart/*")) {
@@ -319,7 +324,7 @@ class MailActivity : AppCompatActivity() {
         }
 
         runOnUiThread{
-            webview.settings.minimumLogicalFontSize=40
+            webview.settings.minimumLogicalFontSize=28
         }
         var result: String = ""
         for (i in 0 until count) {
@@ -336,7 +341,7 @@ class MailActivity : AppCompatActivity() {
         var result: String = ""
         if (bodyPart.isMimeType("text/plain")  && bodyPart.fileName.isNullOrBlank()) {
             runOnUiThread{
-                webview.settings.minimumLogicalFontSize=40
+                webview.settings.minimumLogicalFontSize=28
             }
             result = bodyPart.content as String
         } else if (bodyPart.isMimeType("text/html")) {

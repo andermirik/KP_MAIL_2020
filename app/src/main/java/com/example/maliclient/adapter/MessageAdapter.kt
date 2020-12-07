@@ -140,7 +140,10 @@ class MessageAdapter(var context: Context, var messages: Array<MessageCard>, var
         holder.tv_name.text = message.sender_name
         holder.tv_userlogin.text = login_text
 
-        val color_num = Math.abs(message.sender_name.hashCode() + message.sender_name[0].toInt()) % colors.size
-        holder.inner_circle.setCardBackgroundColor(colors[color_num])
+        if(message.sender_name.isNotBlank()) {
+            val color_num =
+                Math.abs(message.sender_name.hashCode() + message.sender_name[0].toInt()) % colors.size
+            holder.inner_circle.setCardBackgroundColor(colors[color_num])
+        }
     }
 }

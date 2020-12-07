@@ -338,7 +338,7 @@ class MainActivity : AppCompatActivity(){
             try {
                 if (message.from != null && message.from.isNotEmpty()) {
                     val address = (message.from[0] as InternetAddress)
-                    if (address.personal != null)
+                    if (address.personal != null && address.personal.isNotBlank())
                         sender_name = address.personal
                     else
                         sender_name = address.address

@@ -13,17 +13,27 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.TextView
+import android.widget.Toast
 import androidx.cardview.widget.CardView
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.recyclerview.widget.RecyclerView
+import androidx.room.Room
+import com.example.maliclient.AppDatabase
 import com.example.maliclient.R
+import com.example.maliclient.model.User
+import com.example.maliclient.model.UserKeysDb
 import java.io.IOException
+import java.security.KeyFactory
+import java.security.KeyPair
+import java.security.KeyPairGenerator
+import java.security.SecureRandom
+import java.security.spec.X509EncodedKeySpec
 import javax.mail.BodyPart
 import javax.mail.Folder
 import javax.mail.internet.MimeUtility
 
 
-class AttachmentAdapter(var context: Context, var attachments: Array<BodyPart>, var folder : Folder)
+class AttachmentAdapter(var context: Context, var attachments: Array<BodyPart>, var folder : Folder, var username: String)
     : RecyclerView.Adapter<AttachmentAdapter.ViewHolder>() {
 
     var colors = mapOf(
@@ -42,17 +52,41 @@ class AttachmentAdapter(var context: Context, var attachments: Array<BodyPart>, 
         if (num == RecyclerView.NO_POSITION)
             return
 
-        val intent = Intent(Intent.ACTION_CREATE_DOCUMENT)
-        val thread = Thread(Runnable {
-            if(!folder.isOpen)
-                folder.open(Folder.READ_ONLY)
-            intent.type = attachments[num].contentType
-            intent.putExtra(Intent.EXTRA_TITLE, MimeUtility.decodeText(attachments[num].fileName))
-            this.num = num
-            (context as Activity).startActivityForResult(intent,1)
-        })
-        thread.start()
-        thread.join()
+        if(attachments[num].fileName=="public-${username}.key"){
+            val db = Room.databaseBuilder(
+                context,
+                AppDatabase::class.java, "database"
+            )
+                .allowMainThreadQueries()
+                .build()
+
+            if(db.userkeysDao().getByLogin(username).isEmpty()) {
+                val buf = ByteArray(attachments[num].size)
+                attachments[num].inputStream.read(buf, 0, attachments[num].size)
+
+                val X509publicKey = X509EncodedKeySpec(buf)
+                val kf: KeyFactory = KeyFactory.getInstance("RSA")
+                val public = kf.generatePublic(X509publicKey)
+
+                db.userkeysDao().insertAll(UserKeysDb(username, public.encoded, byteArrayOf()))
+                Toast.makeText(context, "ключ сохранён", Toast.LENGTH_SHORT).show()
+            }
+            else {
+                Toast.makeText(context, "ключ уже сохранён", Toast.LENGTH_SHORT).show()
+            }
+        }else{
+            val intent = Intent(Intent.ACTION_CREATE_DOCUMENT)
+            val thread = Thread(Runnable {
+                if(!folder.isOpen)
+                    folder.open(Folder.READ_ONLY)
+                intent.type = attachments[num].contentType
+                intent.putExtra(Intent.EXTRA_TITLE, MimeUtility.decodeText(attachments[num].fileName))
+                this.num = num
+                (context as Activity).startActivityForResult(intent,1)
+            })
+            thread.start()
+            thread.join()
+        }
     }
 
     fun on_result(requestCode: Int, resultCode: Int, data: Intent?){

@@ -116,8 +116,6 @@
                     android:id="@+id/edit_subject"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:clickable="true"
-                    android:focusable="true"
                     android:hint="Тема:"
                     android:paddingStart="8dp"
                     android:paddingEnd="50dp"
@@ -134,7 +132,7 @@
                 android:clickable="true"
                 android:focusable="true"
                 android:rotation="-45"
-
+                android:background="?android:attr/selectableItemBackground"
                 android:src="@drawable/ic_baseline_attachment_24"
                 app:layout_constraintBottom_toBottomOf="@+id/textInputLayout2"
                 app:layout_constraintEnd_toEndOf="@+id/textInputLayout2"
@@ -171,7 +169,23 @@
                     app:layout_constraintStart_toStartOf="parent"
                     app:layout_constraintTop_toTopOf="parent" />
 
+                <TextView
+                    android:id="@+id/btn_key_attachment"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="16dp"
+                    android:layout_marginBottom="8dp"
+                    android:background="?android:attr/selectableItemBackground"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:text="Ваш ключ"
+                    android:textColor="#2196F3"
+                    app:layout_constraintBottom_toTopOf="@+id/view4"
+                    app:layout_constraintStart_toEndOf="@+id/sw_sign"
+                    app:layout_constraintTop_toTopOf="parent" />
+
                 <View
+                    android:id="@+id/view4"
                     android:layout_width="match_parent"
                     android:layout_height="1dp"
                     android:layout_marginStart="32dp"
