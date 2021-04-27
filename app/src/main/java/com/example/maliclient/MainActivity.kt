@@ -15,6 +15,8 @@ import com.example.maliclient.adapter.FolderAdapter
 import com.example.maliclient.adapter.MessageAdapter
 import com.example.maliclient.adapter.UserAdapter
 import com.example.maliclient.model.*
+import com.example.maliclient.nav.SwipeHelper
+import com.example.maliclient.nav.SwipeHelper.UnderlayButtonClickListener
 import com.sun.mail.imap.IMAPFolder
 import kotlinx.android.synthetic.main.activity_main.*
 import kotlinx.android.synthetic.main.activity_main.view.*
@@ -27,6 +29,8 @@ import javax.mail.*
 import javax.mail.internet.ContentType
 import javax.mail.internet.InternetAddress
 import javax.mail.internet.MimeMultipart
+import kotlin.collections.ArrayList
+import kotlin.concurrent.thread
 
 
 class MainActivity : AppCompatActivity(){
@@ -43,6 +47,10 @@ class MainActivity : AppCompatActivity(){
         window.statusBarColor = Color.TRANSPARENT
 
         btn_menu.setOnClickListener{
+            drawer.openDrawer(Gravity.LEFT)
+        }
+
+        btn_search.setOnClickListener{
             drawer.openDrawer(Gravity.LEFT)
         }
 
@@ -66,7 +74,11 @@ class MainActivity : AppCompatActivity(){
         }
 
         if(db.userDao().getAll().isNotEmpty()) {
-            nav_view.rv_users.layoutManager = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
+            nav_view.rv_users.layoutManager = LinearLayoutManager(
+                this,
+                LinearLayoutManager.HORIZONTAL,
+                false
+            )
             nav_view.rv_users.adapter = UserAdapter(this, list, this)
             (nav_view.rv_users.adapter as UserAdapter).select(0)
         }
@@ -84,6 +96,36 @@ class MainActivity : AppCompatActivity(){
             load_messages(current_folder)
         }
 
+
+        val swipeHelper: SwipeHelper = object : SwipeHelper(this, rv_mails) {
+            override fun instantiateUnderlayButton(
+                viewHolder: RecyclerView.ViewHolder,
+                underlayButtons: MutableList<UnderlayButton>
+            ) {
+                underlayButtons.add(UnderlayButton(
+                    this@MainActivity,
+                    "Удалить",
+                    resources.getDrawable(R.drawable.ic_baseline_delete_sweep_24, null),
+                    Color.parseColor("#ff2b2b"),
+                    true,
+                    UnderlayButtonClickListener {
+                        mark_message_delete(it)
+                        (rv_mails.adapter as MessageAdapter).removeMessage(it)
+                    }
+                ))
+                underlayButtons.add(UnderlayButton(
+                    this@MainActivity,
+                    "Прочесть",
+                    resources.getDrawable(R.drawable.ic_baseline_mail_outline_24, null),
+                    Color.parseColor("#FFFFA726"),
+                    false,
+                    UnderlayButtonClickListener {
+                        mark_message_seen(it)
+                        (rv_mails.adapter as MessageAdapter).seenMessage(it)
+                    }
+                ))
+            }
+        }
 
         rv_mails.addOnScrollListener(object : RecyclerView.OnScrollListener() {
             override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
@@ -111,7 +153,52 @@ class MainActivity : AppCompatActivity(){
 
     }
 
+    fun mark_message_delete(pos : Int){
+        thread {
+            val message_uid = (rv_mails.adapter as MessageAdapter).messages[pos].message_uid
+            val store = get_IMAP_store(current_user!!)
+            val folder = store.getFolder(current_folder)
+
+            try {
+                folder.open(Folder.READ_WRITE)
+                (folder as UIDFolder).getMessageByUID(message_uid).setFlag(Flags.Flag.DELETED, true)
+                folder.close(true)
+            }catch(e: Exception){
+                Log.d("TAG", e.toString())
+            }
+        }.join()
+    }
+
+    fun mark_message_seen(pos : Int){
+        thread{
+            val message_uid = (rv_mails.adapter as MessageAdapter).messages[pos].message_uid
+            val store = get_IMAP_store(current_user!!)
+            val folder = store.getFolder(current_folder)
+
+            try {
+                folder.open(Folder.READ_WRITE)
+                (folder as UIDFolder).getMessageByUID(message_uid).setFlag(Flags.Flag.SEEN, true)
+                folder.close(true)
+            }catch(e: Exception){}
+        }.join()
+
+    }
+
     fun on_select_message(message_uid: Long){
+
+        thread{
+            val store = get_IMAP_store(current_user!!)
+            val folder = store.getFolder(current_folder)
+
+            try {
+                folder.open(Folder.READ_WRITE)
+                (folder as UIDFolder).getMessageByUID(message_uid).setFlag(Flags.Flag.SEEN, true)
+                folder.close(true)
+            }catch(e: Exception){}
+        }
+
+        (rv_mails.adapter as MessageAdapter).seenMessage((rv_mails.adapter as MessageAdapter).getPosByUID(message_uid))
+
         val intent = Intent(this, MailActivity::class.java)
         intent.putExtra("folder_name", current_folder)
         intent.putExtra("message_uid", message_uid)
@@ -119,7 +206,7 @@ class MainActivity : AppCompatActivity(){
         startActivity(intent)
     }
 
-    fun on_select_user(users : List<UserCard>, position : Int){
+    fun on_select_user(users: List<UserCard>, position: Int){
         nav_view.tv_user.text = users[position].login
         val db_users = db.userDao().getByLogin(users[position].login)
         if(db_users.isNotEmpty()){
@@ -135,13 +222,13 @@ class MainActivity : AppCompatActivity(){
         finish()
     }
 
-    fun load_messages(folder_name : String){
+    fun load_messages(folder_name: String){
         val thread = Thread(Runnable {
             val store = get_IMAP_store(current_user!!)
             val folder = store.getFolder(folder_name)
 
             try {
-                runOnUiThread(Runnable{
+                runOnUiThread(Runnable {
                     swipe_refresh.isRefreshing = true
                 })
 
@@ -150,23 +237,29 @@ class MainActivity : AppCompatActivity(){
 
                 messages = folder.getMessages(1, folder.messageCount)
                 sync_to_db(messages, folder as UIDFolder)
-                val messages_db = db.messageDao().getBydFolderNameAndUserName(folder.name, current_user!!.login)
+                val messages_db = db.messageDao().getBydFolderNameAndUserName(
+                    folder.name,
+                    current_user!!.login
+                )
                 val message_cards = arrayListOf<MessageCard>()
 
                 for (message_db in messages_db)
                     message_cards.add(
                         MessageCard(
                             message_db.sender_name,
+                            message_db.sender_address,
                             message_db.subject,
                             message_db.body,
                             message_db.date,
                             message_db.message_uid,
                             message_db.folder_name,
-                            message_db.userlogin
-                    ))
+                            message_db.userlogin,
+                            message_db.isReaded
+                        )
+                    )
 
                 //val messages_cards = cast_messages(messages, folder as UIDFolder)
-                runOnUiThread(Runnable{
+                runOnUiThread(Runnable {
                     message_cards.sortWith(Comparator { message_card, t1 ->
                         val Date: Long = message_card.date.time
                         val Date1: Long = t1.date.time
@@ -179,9 +272,9 @@ class MainActivity : AppCompatActivity(){
                     swipe_refresh.isRefreshing = false
                 })
                 folder.close()
-            }catch(ex : FolderNotFoundException){
+            } catch (ex: FolderNotFoundException) {
 
-                runOnUiThread(Runnable{
+                runOnUiThread(Runnable {
                     swipe_refresh.isRefreshing = false
                     Toast.makeText(this, "folder not found", Toast.LENGTH_SHORT).show()
                 })
@@ -192,13 +285,17 @@ class MainActivity : AppCompatActivity(){
         thread.start()
     }
 
-    fun sync_to_db(messages: Array<Message>, folder : UIDFolder){
-        val db_messages = db.messageDao().getBydFolderNameAndUserName(current_folder, current_user!!.login)
+    fun sync_to_db(messages: Array<Message>, folder: UIDFolder){
+        val db_messages = db.messageDao().getBydFolderNameAndUserName(
+            current_folder,
+            current_user!!.login
+        )
         val db_message_uids = arrayListOf<Long>()
         val message_uids = arrayListOf<Long>()
 
         val fetchProfile = FetchProfile()
         fetchProfile.add(UIDFolder.FetchProfileItem.UID)
+        fetchProfile.add(UIDFolder.FetchProfileItem.FLAGS)
         (folder as Folder).fetch(messages, fetchProfile)
 
         for (db_message in db_messages){
@@ -208,8 +305,16 @@ class MainActivity : AppCompatActivity(){
         val messages_to_save = arrayListOf<Message>()
 
         for(message in messages){
-            if(folder.getUID(message) in db_message_uids)
+            val isReaded = message.flags.contains(Flags.Flag.SEEN)
+            val message_uid = folder.getUID(message)
+
+            if(message_uid in db_message_uids){
+                val cur_db_message = db_messages.find { messageDb -> messageDb.message_uid == message_uid }
+                if(cur_db_message != null && isReaded != cur_db_message.isReaded)
+                    db.messageDao().updateIsReadedById(isReaded, message_uid)
                 continue
+            }
+
             messages_to_save.add(message)
         }
         val message_cards = cast_messages(messages_to_save.toTypedArray(), folder)
@@ -217,12 +322,14 @@ class MainActivity : AppCompatActivity(){
         for(message_card in message_cards) {
             val message_temp = MessageDb(
                 message_card.sender_name,
+                message_card.sender_address,
                 message_card.subject,
                 message_card.body,
                 message_card.date,
                 message_card.message_uid,
                 message_card.folder_name,
-                message_card.userlogin
+                message_card.userlogin,
+                message_card.isReaded
             )
             db.messageDao().insertAll(message_temp)
         }
@@ -237,7 +344,7 @@ class MainActivity : AppCompatActivity(){
         }
     }
 
-    fun on_select_folder(folders : Array<FolderCard>, position: Int){
+    fun on_select_folder(folders: Array<FolderCard>, position: Int){
         folder_name.text = folders[position].fakename
         current_folder = folders[position].name
         load_messages(current_folder)
@@ -255,7 +362,7 @@ class MainActivity : AppCompatActivity(){
         return store
     }
 
-    fun load_folders(user : User){
+    fun load_folders(user: User){
         val thread = Thread(Runnable {
             val store = get_IMAP_store(user)
             val folders = store.defaultFolder.list("*")
@@ -268,7 +375,7 @@ class MainActivity : AppCompatActivity(){
         thread.start()
     }
 
-    fun order_folders(folders : Array<FolderCard>) : Array<FolderCard>{
+    fun order_folders(folders: Array<FolderCard>) : Array<FolderCard>{
         val must_have_folders = arrayListOf(
             "Входящие",
             "Отправленные",
@@ -294,7 +401,7 @@ class MainActivity : AppCompatActivity(){
         return folder_cards.toTypedArray()
     }
 
-    fun cast_folders(folders : Array<Folder>) : Array<FolderCard>{
+    fun cast_folders(folders: Array<Folder>) : Array<FolderCard>{
         val folder_map = hashMapOf<String, String>(
             "Drafts" to "Черновики",
             "Outbox" to "Исходящие",
@@ -322,7 +429,7 @@ class MainActivity : AppCompatActivity(){
         return order_folders(folder_cards.toTypedArray())
     }
 
-    fun cast_messages(messages:Array<Message>, folder : UIDFolder) : Array<MessageCard>{
+    fun cast_messages(messages: Array<Message>, folder: UIDFolder) : Array<MessageCard>{
 
         val fetchProfile = FetchProfile()
         fetchProfile.add(IMAPFolder.FetchProfileItem.ENVELOPE)
@@ -331,13 +438,17 @@ class MainActivity : AppCompatActivity(){
         val res = arrayListOf<MessageCard>()
         for(message in messages){
             var sender_name = ""
+            var sender_address = ""
             var message_subject = ""
             var message_text = ""
+
+            var isReaded = message.flags.contains(Flags.Flag.SEEN)
 
             Log.d("TAG", message.messageNumber.toString() + " начато")
             try {
                 if (message.from != null && message.from.isNotEmpty()) {
                     val address = (message.from[0] as InternetAddress)
+                    sender_address = address.address
                     if (address.personal != null && address.personal.isNotBlank())
                         sender_name = address.personal
                     else
@@ -345,14 +456,14 @@ class MainActivity : AppCompatActivity(){
                 } else {
                     sender_name = "me"
                 }
-            }catch (e:MessagingException){
+            }catch (e: MessagingException){
                 Log.d("TAG", e.toString())
             }
 
             try {
                 if (message.subject != null)
                     message_subject = message.subject
-            }catch(e:MessagingException){
+            }catch (e: MessagingException){
                 Log.d("TAG", e.toString())
             }
             try{
@@ -362,15 +473,19 @@ class MainActivity : AppCompatActivity(){
                 Log.d("TAG", e.toString())
             }
 
-            res.add(MessageCard(
-                sender_name,
-                message_subject,
-                message_text,
-                message.receivedDate,
-                folder.getUID(message),
-                (folder as Folder).name,
-                current_user!!.login
-            ))
+            res.add(
+                MessageCard(
+                    sender_name,
+                    sender_address,
+                    message_subject,
+                    message_text,
+                    message.receivedDate,
+                    folder.getUID(message),
+                    (folder as Folder).name,
+                    current_user!!.login,
+                    isReaded
+                )
+            )
         }
         return res.toTypedArray()
     }

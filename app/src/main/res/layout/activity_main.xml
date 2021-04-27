@@ -49,6 +49,20 @@
                     app:layout_constraintEnd_toEndOf="parent"
                     app:layout_constraintStart_toStartOf="parent"
                     app:layout_constraintTop_toTopOf="parent" />
+
+                <ImageView
+                    android:id="@+id/btn_search"
+                    android:layout_width="40dp"
+                    android:layout_height="32dp"
+                    android:layout_marginEnd="8dp"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:src="@drawable/ic_baseline_search_24"
+
+                    app:layout_constraintBottom_toBottomOf="parent"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    app:layout_constraintTop_toTopOf="parent" />
+
             </androidx.constraintlayout.widget.ConstraintLayout>
         </androidx.cardview.widget.CardView>
 
@@ -78,7 +92,7 @@
                 android:layout_marginBottom="16dp"
 
                 android:src="@drawable/ic_baseline_add_24"
-                app:backgroundTint="#FFCC00"
+                app:backgroundTint="#266D9B"
                 app:fabCustomSize="60dp"
                 app:fabSize="auto"
                 app:layout_constraintBottom_toBottomOf="parent"

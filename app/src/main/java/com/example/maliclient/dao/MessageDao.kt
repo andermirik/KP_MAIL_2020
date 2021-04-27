@@ -5,7 +5,6 @@ import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.Query
 import com.example.maliclient.model.MessageDb
-import com.example.maliclient.model.User
 
 @Dao
 interface MessageDao {
@@ -21,7 +20,16 @@ interface MessageDao {
     @Insert
     fun insertAll(vararg messages: MessageDb)
 
+    @Query("UPDATE messagedb SET isReaded = :isReaded WHERE message_uid = :uid")
+    fun updateWhereIsReaded(isReaded: Boolean, uid : Long)
+
+    @Query("UPDATE messagedb SET isReaded = :isReaded WHERE message_uid = :uid")
+    fun updateIsReadedById(isReaded: Boolean, uid : Long)
+
     @Delete
     fun delete(message: MessageDb)
+
+    @Query("SELECT * FROM messagedb WHERE :login = messagedb.sender_name OR :login = messagedb.userlogin AND messagedb.sender_name NOT LIKE '=?%' GROUP BY messagedb.sender_name")
+    fun getAllContacts(login:String) : List<MessageDb>
 
 }

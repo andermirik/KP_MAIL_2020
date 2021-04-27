@@ -11,9 +11,14 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.room.Room
 import com.commonsware.cwac.anddown.AndDown
+import com.example.maliclient.adapter.AutoCompleteContactAdapter
 import com.example.maliclient.adapter.OutAttachmentAdapter
+import com.example.maliclient.model.MessageDb
 import com.example.maliclient.model.User
 import com.example.maliclient.model.UserKeysDb
+import com.hootsuite.nachos.NachoTextView.OnChipClickListener
+import com.hootsuite.nachos.terminator.ChipTerminatorHandler
+import com.hootsuite.nachos.validator.ChipifyingNachoValidator
 import kotlinx.android.synthetic.main.activity_send_mail.*
 import java.io.InputStream
 import java.security.*
@@ -51,6 +56,22 @@ class SendMailActivity : AppCompatActivity() {
 
         val user = db.userDao().getByLogin(intent.getStringExtra("user_login")!!)[0]
 
+        val contacts = db.messageDao().getAllContacts(user.login)
+        val adapter = AutoCompleteContactAdapter(this, contacts as ArrayList<MessageDb>)
+        edit_to.setAdapter(adapter)
+        edit_to.setOnTouchListener { _, event ->
+            edit_to.showDropDown()
+            false
+        }
+
+        edit_to.addChipTerminator('\n', ChipTerminatorHandler.BEHAVIOR_CHIPIFY_ALL)
+        edit_to.addChipTerminator(' ', ChipTerminatorHandler.BEHAVIOR_CHIPIFY_TO_TERMINATOR)
+        edit_to.setNachoValidator(ChipifyingNachoValidator())
+        edit_to.enableEditChipOnTouch(true, true)
+        edit_to.setOnChipClickListener(OnChipClickListener { chip, motionEvent ->
+            // Handle click event
+        })
+
         btn_send.setOnClickListener{
             val send_to = edit_to.text.toString()
             val subject = edit_subject.text.toString()
@@ -62,11 +83,11 @@ class SendMailActivity : AppCompatActivity() {
 
             val thread = Thread(Runnable {
                 try {
-                    if(sw_crypt.isChecked){
+                    if (sw_crypt.isChecked) {
                         val key = getRandomString(16)  // 128 bit key
                         text_to_send = encrypt(key, key, text_to_send)
 
-                        for(attachment in attachments){
+                        for (attachment in attachments) {
                             val bytes = attachment.inputStream.readBytes().toString(Charsets.UTF_8)
                             val res = encrypt(key, key, attachment.inputStream)
                             attachment.dataHandler = DataHandler(
@@ -75,7 +96,7 @@ class SendMailActivity : AppCompatActivity() {
                         }
 
                         var public: PublicKey? = null
-                        if(db.userkeysDao().getByLogin(send_to, user.login).isNotEmpty()){
+                        if (db.userkeysDao().getByLogin(send_to, user.login).isNotEmpty()) {
                             val buf = db.userkeysDao().getByLogin(send_to, user.login)[0].public_key
                             val X509publicKey = X509EncodedKeySpec(buf)
                             val kf: KeyFactory = KeyFactory.getInstance("RSA")
@@ -88,22 +109,31 @@ class SendMailActivity : AppCompatActivity() {
                             val key_crypted = RSA.doFinal(key.toByteArray())
 
                             val aes_key_attachment: BodyPart = MimeBodyPart()
-                            val aes_key_source: DataSource = ByteArrayDataSource(Base64.encode(key_crypted, 0), "application/octet-stream")
+                            val aes_key_source: DataSource = ByteArrayDataSource(
+                                Base64.encode(
+                                    key_crypted,
+                                    0
+                                ), "application/octet-stream"
+                            )
                             aes_key_attachment.dataHandler = DataHandler(aes_key_source)
                             aes_key_attachment.fileName = "aes-${user.login}.key"
 
                             attachments.add(aes_key_attachment)
 
-                        }else{
-                            runOnUiThread{
-                                Toast.makeText(this, "не удалось зашифровать содержимое.\nНеобходим публичный ключ получателя", Toast.LENGTH_LONG).show()
+                        } else {
+                            runOnUiThread {
+                                Toast.makeText(
+                                    this,
+                                    "не удалось зашифровать содержимое.\nНеобходим публичный ключ получателя",
+                                    Toast.LENGTH_LONG
+                                ).show()
                             }
                         }
 
 
                     }
 
-                    if(sw_sign.isChecked)
+                    if (sw_sign.isChecked)
                         sign_data(text_to_send)
 
                     val prop_smtp = Properties()
@@ -121,23 +151,23 @@ class SendMailActivity : AppCompatActivity() {
                     message.addRecipients(Message.RecipientType.TO, InternetAddress.parse(send_to))
                     message.subject = subject
 
-                    val message_body_part : BodyPart = MimeBodyPart()
+                    val message_body_part: BodyPart = MimeBodyPart()
                     message_body_part.setContent(text_to_send, "text/html")
 
                     val multipart: Multipart = MimeMultipart()
                     multipart.addBodyPart(message_body_part)
 
-                    for(attachment in attachments){
+                    for (attachment in attachments) {
                         multipart.addBodyPart(attachment)
                     }
 
                     message.setContent(multipart)
 
                     transport.sendMessage(message, InternetAddress.parse(send_to))
-                }catch(e: MessagingException){
+                } catch (e: MessagingException) {
                     Log.d("TAG", e.toString())
                 }
-                runOnUiThread{
+                runOnUiThread {
                     Toast.makeText(this, "сообщение отправлено", Toast.LENGTH_SHORT).show()
                     finish()
                 }
@@ -166,7 +196,14 @@ class SendMailActivity : AppCompatActivity() {
                 val pair: KeyPair = keyGen.generateKeyPair()
                 public = pair.public
                 val private = pair.private
-                db.userkeysDao().insertAll(UserKeysDb(user.login, user.login, public!!.encoded, private.encoded))
+                db.userkeysDao().insertAll(
+                    UserKeysDb(
+                        user.login,
+                        user.login,
+                        public!!.encoded,
+                        private.encoded
+                    )
+                )
             }else{
                 val buf = db.userkeysDao().getByLogin(user.login, user.login)[0].public_key
                 val X509publicKey = X509EncodedKeySpec(buf)
@@ -175,7 +212,10 @@ class SendMailActivity : AppCompatActivity() {
             }
 
             val public_key_attachment: BodyPart = MimeBodyPart()
-            val public_key_source: DataSource = ByteArrayDataSource(public!!.encoded, "application/octet-stream")
+            val public_key_source: DataSource = ByteArrayDataSource(
+                public!!.encoded,
+                "application/octet-stream"
+            )
             public_key_attachment.dataHandler = DataHandler(public_key_source)
             public_key_attachment.fileName = "public-${user.login}.key"
 
@@ -183,6 +223,13 @@ class SendMailActivity : AppCompatActivity() {
             update_rv()
         }
 
+    }
+
+    fun onSelectAddress(text: String){
+        edit_to.setText(text)
+        edit_to.chipifyAllUnterminatedTokens()
+        edit_to.setSelection(edit_to.text.toString().length)
+        edit_to.dismissDropDown()
     }
 
     fun getRandomString(length: Int) : String {
@@ -269,12 +316,18 @@ class SendMailActivity : AppCompatActivity() {
             val sig = rsa.sign()
 
             val key_attachment: BodyPart = MimeBodyPart()
-            val key_source: DataSource = ByteArrayDataSource(public.encoded, "application/octet-stream")
+            val key_source: DataSource = ByteArrayDataSource(
+                public.encoded,
+                "application/octet-stream"
+            )
             key_attachment.dataHandler = DataHandler(key_source)
             key_attachment.fileName = "sign-public.key"
 
             val sign_attachment: BodyPart = MimeBodyPart()
-            val sign_source: DataSource = ByteArrayDataSource(Base64.encode(sig, 0), "application/octet-stream")
+            val sign_source: DataSource = ByteArrayDataSource(
+                Base64.encode(sig, 0),
+                "application/octet-stream"
+            )
             sign_attachment.dataHandler = DataHandler(sign_source)
             sign_attachment.fileName = "sign.sign"
 
@@ -293,7 +346,11 @@ class SendMailActivity : AppCompatActivity() {
                 val uri = data!!.data!!
 
                 val attachment: BodyPart = MimeBodyPart()
-                val source: DataSource = ByteArrayDataSource(contentResolver.openInputStream(uri), contentResolver.getType(uri))
+                val source: DataSource = ByteArrayDataSource(
+                    contentResolver.openInputStream(uri), contentResolver.getType(
+                        uri
+                    )
+                )
                 attachment.dataHandler = DataHandler(source)
                 attachment.fileName = get_filename_by_uri(uri)
 
@@ -303,7 +360,7 @@ class SendMailActivity : AppCompatActivity() {
         }
     }
 
-    fun get_filename_by_uri(uri : Uri) : String{
+    fun get_filename_by_uri(uri: Uri) : String{
         contentResolver.query(uri, null, null, null, null).use { cursor ->
             cursor?.let {
                 val nameIndex = it.getColumnIndex(OpenableColumns.DISPLAY_NAME)

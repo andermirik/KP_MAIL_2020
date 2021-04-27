@@ -60,6 +60,8 @@ dependencies {
 
     implementation 'org.jsoup:jsoup:1.13.1'
 
+    implementation "com.hootsuite.android:nachos:1.1.1"
+
     implementation 'com.commonsware.cwac:anddown:0.4.0'
     //implementation 'org.apache.commons:commons-email:1.5'
 
