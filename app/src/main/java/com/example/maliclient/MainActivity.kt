@@ -364,13 +364,19 @@ class MainActivity : AppCompatActivity(){
 
     fun load_folders(user: User){
         val thread = Thread(Runnable {
-            val store = get_IMAP_store(user)
-            val folders = store.defaultFolder.list("*")
-            runOnUiThread {
-                rv_folders.adapter = FolderAdapter(this, cast_folders(folders), this)
-                (rv_folders.adapter as FolderAdapter).select(0)
+            try {
+                val store = get_IMAP_store(user)
+                val folders = store.defaultFolder.list("*")
+                runOnUiThread {
+                    rv_folders.adapter = FolderAdapter(this, cast_folders(folders), this)
+                    (rv_folders.adapter as FolderAdapter).select(0)
+                }
+                store.close()
+            }catch (e : AuthenticationFailedException){
+                db.userDao().delete(user)
+                on_add_new_user()
+                finish()
             }
-            store.close()
         })
         thread.start()
     }

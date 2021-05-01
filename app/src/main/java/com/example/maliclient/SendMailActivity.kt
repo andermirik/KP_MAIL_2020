@@ -5,6 +5,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.provider.OpenableColumns
+import android.text.TextUtils
 import android.util.Base64
 import android.util.Log
 import android.widget.Toast
@@ -18,7 +19,9 @@ import com.example.maliclient.model.User
 import com.example.maliclient.model.UserKeysDb
 import com.hootsuite.nachos.NachoTextView.OnChipClickListener
 import com.hootsuite.nachos.terminator.ChipTerminatorHandler
+import com.hootsuite.nachos.tokenizer.ChipTokenizer
 import com.hootsuite.nachos.validator.ChipifyingNachoValidator
+import com.hootsuite.nachos.validator.NachoValidator
 import kotlinx.android.synthetic.main.activity_send_mail.*
 import java.io.InputStream
 import java.security.*
@@ -55,7 +58,12 @@ class SendMailActivity : AppCompatActivity() {
             .build()
 
         val user = db.userDao().getByLogin(intent.getStringExtra("user_login")!!)[0]
+        val receiver = intent.getStringExtra("receiver")
 
+        if(receiver != null) {
+            edit_to.setText(receiver)
+            edit_to.chipifyAllUnterminatedTokens()
+        }
         val contacts = db.messageDao().getAllContacts(user.login)
         val adapter = AutoCompleteContactAdapter(this, contacts as ArrayList<MessageDb>)
         edit_to.setAdapter(adapter)
@@ -66,14 +74,28 @@ class SendMailActivity : AppCompatActivity() {
 
         edit_to.addChipTerminator('\n', ChipTerminatorHandler.BEHAVIOR_CHIPIFY_ALL)
         edit_to.addChipTerminator(' ', ChipTerminatorHandler.BEHAVIOR_CHIPIFY_TO_TERMINATOR)
-        edit_to.setNachoValidator(ChipifyingNachoValidator())
         edit_to.enableEditChipOnTouch(true, true)
         edit_to.setOnChipClickListener(OnChipClickListener { chip, motionEvent ->
             // Handle click event
         })
 
         btn_send.setOnClickListener{
-            val send_to = edit_to.text.toString()
+
+            var temp = ""
+            for (address in edit_to.chipValues){
+                val is_valid_address = !TextUtils.isEmpty(address)
+                        && android.util.Patterns.EMAIL_ADDRESS.matcher(address).matches()
+                if(is_valid_address)
+                    temp += "$address,"
+            }
+
+            var send_to = edit_to.text.toString()
+            if(temp.isNotEmpty()){
+                send_to = temp.dropLast(1)
+            }else{
+                return@setOnClickListener
+            }
+
             val subject = edit_subject.text.toString()
 
             val text = edit_text.text.toString()
@@ -149,6 +171,7 @@ class SendMailActivity : AppCompatActivity() {
                     val message: MimeMessage = MimeMessage(session)
                     message.setFrom(InternetAddress(user.login))
                     message.addRecipients(Message.RecipientType.TO, InternetAddress.parse(send_to))
+                    message.addRecipients(Message.RecipientType.CC, InternetAddress.parse(send_to));
                     message.subject = subject
 
                     val message_body_part: BodyPart = MimeBodyPart()
@@ -169,6 +192,10 @@ class SendMailActivity : AppCompatActivity() {
                 }
                 runOnUiThread {
                     Toast.makeText(this, "сообщение отправлено", Toast.LENGTH_SHORT).show()
+                    if(intent.getStringExtra("receiver")!=null){
+                        intent = Intent(this@SendMailActivity, MainActivity::class.java)
+                        startActivity(intent)
+                    }
                     finish()
                 }
             })
@@ -185,6 +212,10 @@ class SendMailActivity : AppCompatActivity() {
         }
 
         btn_back.setOnClickListener{
+            if(intent.getStringExtra("receiver")!=null){
+                intent = Intent(this@SendMailActivity, MainActivity::class.java)
+                startActivity(intent)
+            }
             finish()
         }
 
@@ -226,7 +257,13 @@ class SendMailActivity : AppCompatActivity() {
     }
 
     fun onSelectAddress(text: String){
-        edit_to.setText(text)
+
+        while(edit_to.chipTokenizer!!.findAllTokens(edit_to.text).isNotEmpty()){
+            val token = edit_to.chipTokenizer!!.findAllTokens(edit_to.text)[0]
+            edit_to.text = edit_to.text.replace(token.first, token.second, "")
+        }
+
+        edit_to.text.append(text)
         edit_to.chipifyAllUnterminatedTokens()
         edit_to.setSelection(edit_to.text.toString().length)
         edit_to.dismissDropDown()

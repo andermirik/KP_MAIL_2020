@@ -64,8 +64,8 @@ class MessageAdapter(
 
         val cyear = Calendar.getInstance().get(Calendar.YEAR)
         val cmonth = Calendar.getInstance().get(Calendar.MONTH)
-        val cday = Calendar.getInstance().get(Calendar.DAY_OF_MONTH)
-        val cweek = Calendar.getInstance().get(Calendar.WEEK_OF_MONTH)
+        val cday = Calendar.getInstance().get(Calendar.DAY_OF_YEAR)
+        val cweek = Calendar.getInstance().get(Calendar.WEEK_OF_YEAR)
 
         val set = mutableSetOf<String>()
 
@@ -77,8 +77,8 @@ class MessageAdapter(
             cal.time = message.date
             val year = cal[Calendar.YEAR]
             val month = cal[Calendar.MONTH]
-            val day = cal[Calendar.DAY_OF_MONTH]
-            val week = cal[Calendar.WEEK_OF_MONTH]
+            val day = cal[Calendar.DAY_OF_YEAR]
+            val week = cal[Calendar.WEEK_OF_YEAR]
             val hours = cal[Calendar.HOUR_OF_DAY]
             val minutes = cal[Calendar.MINUTE]
 
@@ -91,13 +91,13 @@ class MessageAdapter(
                     temp.add(messages.size - i + 1, MessageCard(date,true))
                 set.add(date)
             }
-            else if(year == cyear && week == cweek-1){
-                date = "На прошлой неделе"
+            else if(week == cweek-1){
+                date = "В этом месяце"
                 if(date !in set)
                     temp.add(messages.size - i + 1, MessageCard(date,true))
                 set.add(date)
-            }else if (month == cmonth){
-                date = "В этом месяце"
+            }else if (month == cmonth && year == cyear){
+                date = "На прошлой неделе"
                 if(date !in set)
                     temp.add(messages.size - i + 1, MessageCard(date,true))
                 set.add(date)
