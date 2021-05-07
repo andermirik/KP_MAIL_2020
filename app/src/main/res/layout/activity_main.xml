@@ -47,7 +47,7 @@
                         android:text="Входящие"
                         android:textColor="#000"
                         android:textSize="18sp"
-                        android:id="@+id/folder_name"
+                        android:id="@+id/tv_folder_name"
 
                         app:layout_constraintBottom_toBottomOf="parent"
                         app:layout_constraintEnd_toEndOf="parent"

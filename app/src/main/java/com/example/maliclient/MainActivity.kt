@@ -25,7 +25,7 @@ import com.google.android.material.bottomsheet.BottomSheetBehavior.BottomSheetCa
 import com.sun.mail.imap.IMAPFolder
 import kotlinx.android.synthetic.main.activity_login.*
 import kotlinx.android.synthetic.main.activity_main.*
-import kotlinx.android.synthetic.main.activity_main.folder_name
+import kotlinx.android.synthetic.main.activity_main.tv_folder_name
 import kotlinx.android.synthetic.main.activity_main.view.*
 import kotlinx.android.synthetic.main.activity_send_mail.*
 import kotlinx.android.synthetic.main.bottom_shit_mail_filter.*
@@ -355,13 +355,9 @@ class MainActivity : AppCompatActivity(){
 
                 messages = folder.getMessages(1, folder.messageCount)
                 sync_to_db(messages, folder as UIDFolder)
-//                val messages_db = db.messageDao().getBydFolderNameAndUserName(
-//                    folder.name,
-//                    current_user!!.login
-//)
 
-                val messages_db : List<MessageDb>
-                if(sw_isReaded.isChecked == true){
+                val messages_db: List<MessageDb>
+                if (sw_isReaded.isChecked == true) {
                     messages_db = db.messageDao().getBydFolderNameAndUserNameWithFilter(
                         folder.name,
                         current_user!!.login,
@@ -372,7 +368,7 @@ class MainActivity : AppCompatActivity(){
                         date1!!,
                         date2!!
                     )
-                }else{
+                } else {
                     messages_db = db.messageDao().getBydFolderNameAndUserNameWithFilter(
                         folder.name,
                         current_user!!.login,
@@ -401,22 +397,22 @@ class MainActivity : AppCompatActivity(){
                         )
                     )
 
-                            //val messages_cards = cast_messages(messages, folder as UIDFolder)
-                            runOnUiThread (Runnable {
-                        message_cards.sortWith(Comparator { message_card, t1 ->
-                            val Date: Long = message_card.date.time
-                            val Date1: Long = t1.date.time
-                            Date.compareTo(Date1)
-                        })
-
-
-                        rv_mails.adapter =
-                            MessageAdapter(this, message_cards.toTypedArray(), this)
-
-                        swipe_refresh.isRefreshing = false
+                //val messages_cards = cast_messages(messages, folder as UIDFolder)
+                runOnUiThread(Runnable {
+                    message_cards.sortWith(Comparator { message_card, t1 ->
+                        val Date: Long = message_card.date.time
+                        val Date1: Long = t1.date.time
+                        Date.compareTo(Date1)
                     })
-                            folder . close ()
-                } catch (ex: FolderNotFoundException) {
+
+
+                    rv_mails.adapter =
+                        MessageAdapter(this, message_cards.toTypedArray(), this)
+
+                    swipe_refresh.isRefreshing = false
+                })
+                folder.close()
+            } catch (ex: FolderNotFoundException) {
 
                 runOnUiThread(Runnable {
                     swipe_refresh.isRefreshing = false
@@ -461,7 +457,60 @@ class MainActivity : AppCompatActivity(){
 
             messages_to_save.add(message)
         }
-        val message_cards = cast_messages(messages_to_save.toTypedArray(), folder)
+
+        val thread_count = 16
+        val count_messages = messages_to_save.count()
+
+        val message_cards = arrayListOf<MessageCard>()
+
+        if(count_messages <= 15)
+            message_cards.addAll(cast_messages(messages_to_save.toTypedArray(), folder))
+        else {
+            val threads = arrayListOf<Thread>()
+            val master = Thread {
+
+                for (i in 0 until thread_count) {
+                    val a = i * (count_messages / thread_count)
+                    var b = (i + 1) * (count_messages / thread_count)-1
+                    if(i == thread_count-1) b = count_messages-1
+
+                    Log.d("AB", "${count_messages} ->  ${a}, ${b}")
+
+                    val slave = Thread {
+                        val thread_store = get_IMAP_store(current_user!!)
+                        val thread_folder = thread_store.getFolder(current_folder)
+
+                        try {
+                            thread_folder.open(Folder.READ_ONLY)
+                            val messages = thread_folder.getMessages(a+1, b+1)
+                            message_cards.addAll(
+                                cast_messages(
+                                    messages, thread_folder as UIDFolder
+                                )
+                            )
+                            thread_folder.close()
+                        } catch (ex: FolderNotFoundException) {
+                            runOnUiThread {
+                                swipe_refresh.isRefreshing = false
+                                Toast.makeText(this, "folder not found", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                        thread_store.close()
+                    }
+                    threads.add(slave)
+                }
+
+                for(slave in threads)
+                    slave.start()
+
+                for(slave in threads) {
+                    slave.join()
+                }
+
+            }
+            master.start()
+            master.join()
+        }
 
         for(message_card in message_cards) {
             val message_temp = MessageDb(
@@ -489,7 +538,7 @@ class MainActivity : AppCompatActivity(){
     }
 
     fun on_select_folder(folders: Array<FolderCard>, position: Int){
-        folder_name.text = folders[position].fakename
+        tv_folder_name.text = folders[position].fakename
         current_folder = folders[position].name
         load_messages(current_folder)
     }
@@ -622,7 +671,6 @@ class MainActivity : AppCompatActivity(){
             }catch (e: MessagingException){
                 Log.d("TAG", e.toString())
             }
-
             res.add(
                 MessageCard(
                     sender_name,
