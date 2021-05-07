@@ -65,4 +65,6 @@ dependencies {
     implementation 'com.commonsware.cwac:anddown:0.4.0'
     //implementation 'org.apache.commons:commons-email:1.5'
 
+    implementation 'com.github.VladimirWrites:Lemniscate:2.0.2'
+
 }

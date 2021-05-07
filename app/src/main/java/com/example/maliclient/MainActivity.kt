@@ -1,11 +1,14 @@
 package com.example.maliclient
 
+import android.app.DatePickerDialog
 import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
 import android.util.Log
 import android.view.Gravity
 import android.view.View
+import android.view.WindowManager
+import android.widget.LinearLayout
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -17,9 +20,17 @@ import com.example.maliclient.adapter.UserAdapter
 import com.example.maliclient.model.*
 import com.example.maliclient.nav.SwipeHelper
 import com.example.maliclient.nav.SwipeHelper.UnderlayButtonClickListener
+import com.google.android.material.bottomsheet.BottomSheetBehavior
+import com.google.android.material.bottomsheet.BottomSheetBehavior.BottomSheetCallback
 import com.sun.mail.imap.IMAPFolder
+import kotlinx.android.synthetic.main.activity_login.*
 import kotlinx.android.synthetic.main.activity_main.*
+import kotlinx.android.synthetic.main.activity_main.folder_name
 import kotlinx.android.synthetic.main.activity_main.view.*
+import kotlinx.android.synthetic.main.activity_send_mail.*
+import kotlinx.android.synthetic.main.bottom_shit_mail_filter.*
+import kotlinx.android.synthetic.main.layout_bottom_sheet.*
+import kotlinx.android.synthetic.main.layout_bottom_sheet.bottom_sheet
 import kotlinx.android.synthetic.main.nav_main.*
 import kotlinx.android.synthetic.main.nav_main.view.*
 import org.jsoup.Jsoup
@@ -29,7 +40,6 @@ import javax.mail.*
 import javax.mail.internet.ContentType
 import javax.mail.internet.InternetAddress
 import javax.mail.internet.MimeMultipart
-import kotlin.collections.ArrayList
 import kotlin.concurrent.thread
 
 
@@ -41,17 +51,121 @@ class MainActivity : AppCompatActivity(){
     var current_user : User? = null
     var current_folder = ""
 
+    lateinit var sheetBehavior : BottomSheetBehavior<LinearLayout>
+
+    fun convert_date(date: Date) : String{
+        val cal = Calendar.getInstance(TimeZone.getTimeZone("Europe/Moscow"))
+        cal.time = date
+        val year = cal[Calendar.YEAR]
+        val month = cal[Calendar.MONTH]
+        val day = cal[Calendar.DAY_OF_MONTH]
+        val hours = cal[Calendar.HOUR_OF_DAY]
+        val minutes = cal[Calendar.MINUTE]
+        var smonth = ""
+        when(month){
+            0 -> smonth = "янв."
+            1 -> smonth = "фев."
+            2 -> smonth = "мар."
+            3 -> smonth = "апр."
+            4 -> smonth = "мая"
+            5 -> smonth = "июн."
+            6 -> smonth = "июл.."
+            7 -> smonth = "авг."
+            8 -> smonth = "сент."
+            9 -> smonth = "окт."
+            10 -> smonth = "нояб."
+            11 -> smonth = "дек."
+        }
+        val sday = if(day > 9) day.toString() else "0${day}"
+        val today = Calendar.getInstance()
+        today.timeZone = TimeZone.getTimeZone("Europe/Moscow")
+
+        if(year == today[Calendar.YEAR]){
+            return "${sday} ${smonth}"
+        }
+        else{
+            return "${sday} ${smonth} ${year}г."
+        }
+
+    }
+
+    var date1: Date? = Date(Long.MIN_VALUE)
+    var date2: Date? = Date(Long.MAX_VALUE)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+        window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS)
         window.statusBarColor = Color.TRANSPARENT
+
+
+        btn_date1.setOnClickListener{
+            val c = Calendar.getInstance()
+            val year = c.get(Calendar.YEAR)
+            val month = c.get(Calendar.MONTH)
+            val day = c.get(Calendar.DAY_OF_MONTH)
+            val dpd = DatePickerDialog(this, DatePickerDialog.OnDateSetListener { view, year, monthOfYear, dayOfMonth ->
+                date1 = Date(year-1900, monthOfYear, dayOfMonth)
+                tv_date1.text = convert_date(date1!!)
+            }, year, month, day)
+            dpd.show()
+        }
+
+        btn_date2.setOnClickListener{
+            val c = Calendar.getInstance()
+            val year = c.get(Calendar.YEAR)
+            val month = c.get(Calendar.MONTH)
+            val day = c.get(Calendar.DAY_OF_MONTH)
+            val dpd = DatePickerDialog(this, DatePickerDialog.OnDateSetListener { view, year, monthOfYear, dayOfMonth ->
+                date2 = Date(year-1900, monthOfYear, dayOfMonth)
+                tv_date2.text = convert_date(date2!!)
+            }, year, month, day)
+            dpd.show()
+        }
+
+        btn_reset_filter.setOnClickListener{
+            tv_date1.text = "нет"
+            tv_date2.text = "нет"
+            bot_edit_subject.setText("")
+            bot_edit_sender.setText("")
+            bot_edit_body.setText("")
+            sw_isReaded.isChecked=false
+            date1 = Date(Long.MIN_VALUE)
+            date2 = Date(Long.MAX_VALUE)
+        }
 
         btn_menu.setOnClickListener{
             drawer.openDrawer(Gravity.LEFT)
         }
 
+        sheetBehavior = BottomSheetBehavior.from(bottom_sheet)
+        sheetBehavior.state = BottomSheetBehavior.STATE_HIDDEN
+        bottom_sheet.visibility = View.VISIBLE
+
+        sheetBehavior.setBottomSheetCallback(object : BottomSheetCallback() {
+            override fun onStateChanged(bottomSheet: View, newState: Int) {
+                if (newState == BottomSheetBehavior.STATE_HIDDEN ) {
+                    load_messages(current_folder)
+                    mask_layout.visibility = View.GONE
+                    window.statusBarColor = Color.TRANSPARENT
+                }
+            }
+
+            override fun onSlide(bottomSheet: View, slideOffset: Float) {
+                // React to dragging events
+            }
+        })
+
         btn_search.setOnClickListener{
-            drawer.openDrawer(Gravity.LEFT)
+            sheetBehavior.state = BottomSheetBehavior.STATE_EXPANDED
+            mask_layout.visibility = View.VISIBLE
+            window.statusBarColor = Color.parseColor("#BEBEBE")
+        }
+
+        mask_layout.setOnClickListener{
+            sheetBehavior.state = BottomSheetBehavior.STATE_HIDDEN
+            window.statusBarColor = Color.TRANSPARENT
+            mask_layout.visibility = View.GONE
         }
 
         db = Room.databaseBuilder(
@@ -153,7 +267,7 @@ class MainActivity : AppCompatActivity(){
 
     }
 
-    fun mark_message_delete(pos : Int){
+    fun mark_message_delete(pos: Int){
         thread {
             val message_uid = (rv_mails.adapter as MessageAdapter).messages[pos].message_uid
             val store = get_IMAP_store(current_user!!)
@@ -163,13 +277,13 @@ class MainActivity : AppCompatActivity(){
                 folder.open(Folder.READ_WRITE)
                 (folder as UIDFolder).getMessageByUID(message_uid).setFlag(Flags.Flag.DELETED, true)
                 folder.close(true)
-            }catch(e: Exception){
+            }catch (e: Exception){
                 Log.d("TAG", e.toString())
             }
         }.join()
     }
 
-    fun mark_message_seen(pos : Int){
+    fun mark_message_seen(pos: Int){
         thread{
             val message_uid = (rv_mails.adapter as MessageAdapter).messages[pos].message_uid
             val store = get_IMAP_store(current_user!!)
@@ -179,7 +293,7 @@ class MainActivity : AppCompatActivity(){
                 folder.open(Folder.READ_WRITE)
                 (folder as UIDFolder).getMessageByUID(message_uid).setFlag(Flags.Flag.SEEN, true)
                 folder.close(true)
-            }catch(e: Exception){}
+            }catch (e: Exception){}
         }.join()
 
     }
@@ -194,10 +308,14 @@ class MainActivity : AppCompatActivity(){
                 folder.open(Folder.READ_WRITE)
                 (folder as UIDFolder).getMessageByUID(message_uid).setFlag(Flags.Flag.SEEN, true)
                 folder.close(true)
-            }catch(e: Exception){}
+            }catch (e: Exception){}
         }
 
-        (rv_mails.adapter as MessageAdapter).seenMessage((rv_mails.adapter as MessageAdapter).getPosByUID(message_uid))
+        (rv_mails.adapter as MessageAdapter).seenMessage(
+            (rv_mails.adapter as MessageAdapter).getPosByUID(
+                message_uid
+            )
+        )
 
         val intent = Intent(this, MailActivity::class.java)
         intent.putExtra("folder_name", current_folder)
@@ -237,10 +355,35 @@ class MainActivity : AppCompatActivity(){
 
                 messages = folder.getMessages(1, folder.messageCount)
                 sync_to_db(messages, folder as UIDFolder)
-                val messages_db = db.messageDao().getBydFolderNameAndUserName(
-                    folder.name,
-                    current_user!!.login
-                )
+//                val messages_db = db.messageDao().getBydFolderNameAndUserName(
+//                    folder.name,
+//                    current_user!!.login
+//)
+
+                val messages_db : List<MessageDb>
+                if(sw_isReaded.isChecked == true){
+                    messages_db = db.messageDao().getBydFolderNameAndUserNameWithFilter(
+                        folder.name,
+                        current_user!!.login,
+                        "%${bot_edit_subject.text}%",
+                        "%${bot_edit_body.text}%",
+                        "%${bot_edit_sender.text}%",
+                        !sw_isReaded.isChecked,
+                        date1!!,
+                        date2!!
+                    )
+                }else{
+                    messages_db = db.messageDao().getBydFolderNameAndUserNameWithFilter(
+                        folder.name,
+                        current_user!!.login,
+                        "%${bot_edit_subject.text}%",
+                        "%${bot_edit_body.text}%",
+                        "%${bot_edit_sender.text}%",
+                        date1!!,
+                        date2!!
+                    )
+                }
+
                 val message_cards = arrayListOf<MessageCard>()
 
                 for (message_db in messages_db)
@@ -258,21 +401,22 @@ class MainActivity : AppCompatActivity(){
                         )
                     )
 
-                //val messages_cards = cast_messages(messages, folder as UIDFolder)
-                runOnUiThread(Runnable {
-                    message_cards.sortWith(Comparator { message_card, t1 ->
-                        val Date: Long = message_card.date.time
-                        val Date1: Long = t1.date.time
-                        Date.compareTo(Date1)
+                            //val messages_cards = cast_messages(messages, folder as UIDFolder)
+                            runOnUiThread (Runnable {
+                        message_cards.sortWith(Comparator { message_card, t1 ->
+                            val Date: Long = message_card.date.time
+                            val Date1: Long = t1.date.time
+                            Date.compareTo(Date1)
+                        })
+
+
+                        rv_mails.adapter =
+                            MessageAdapter(this, message_cards.toTypedArray(), this)
+
+                        swipe_refresh.isRefreshing = false
                     })
-
-
-                    rv_mails.adapter = MessageAdapter(this, message_cards.toTypedArray(), this)
-
-                    swipe_refresh.isRefreshing = false
-                })
-                folder.close()
-            } catch (ex: FolderNotFoundException) {
+                            folder . close ()
+                } catch (ex: FolderNotFoundException) {
 
                 runOnUiThread(Runnable {
                     swipe_refresh.isRefreshing = false
@@ -372,7 +516,7 @@ class MainActivity : AppCompatActivity(){
                     (rv_folders.adapter as FolderAdapter).select(0)
                 }
                 store.close()
-            }catch (e : AuthenticationFailedException){
+            } catch (e: AuthenticationFailedException) {
                 db.userDao().delete(user)
                 on_add_new_user()
                 finish()

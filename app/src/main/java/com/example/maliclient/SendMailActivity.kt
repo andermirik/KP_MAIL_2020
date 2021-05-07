@@ -8,6 +8,7 @@ import android.provider.OpenableColumns
 import android.text.TextUtils
 import android.util.Base64
 import android.util.Log
+import android.view.View
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.room.Room
@@ -81,6 +82,9 @@ class SendMailActivity : AppCompatActivity() {
 
         btn_send.setOnClickListener{
 
+            is_sending_message.visibility = View.VISIBLE
+            btn_send.visibility = View.INVISIBLE
+
             var temp = ""
             for (address in edit_to.chipValues){
                 val is_valid_address = !TextUtils.isEmpty(address)
@@ -89,10 +93,12 @@ class SendMailActivity : AppCompatActivity() {
                     temp += "$address,"
             }
 
-            var send_to = edit_to.text.toString()
+            val send_to: String
             if(temp.isNotEmpty()){
                 send_to = temp.dropLast(1)
             }else{
+                is_sending_message.visibility = View.GONE
+                btn_send.visibility = View.VISIBLE
                 return@setOnClickListener
             }
 
@@ -107,11 +113,12 @@ class SendMailActivity : AppCompatActivity() {
                 try {
                     if (sw_crypt.isChecked) {
                         val key = getRandomString(16)  // 128 bit key
-                        text_to_send = encrypt(key, key, text_to_send)
+                        val iv = getRandomString(16)
+                        text_to_send = iv + encrypt(key, iv, text_to_send)
 
                         for (attachment in attachments) {
                             val bytes = attachment.inputStream.readBytes().toString(Charsets.UTF_8)
-                            val res = encrypt(key, key, attachment.inputStream)
+                            val res = encrypt(key, iv, attachment.inputStream)
                             attachment.dataHandler = DataHandler(
                                 ByteArrayDataSource(res, "application/octet-stream")
                             )
@@ -150,6 +157,7 @@ class SendMailActivity : AppCompatActivity() {
                                     Toast.LENGTH_LONG
                                 ).show()
                             }
+
                         }
 
 
@@ -196,12 +204,13 @@ class SendMailActivity : AppCompatActivity() {
                         intent = Intent(this@SendMailActivity, MainActivity::class.java)
                         startActivity(intent)
                     }
+                    is_sending_message.visibility = View.GONE
+                    btn_send.visibility = View.VISIBLE
                     finish()
                 }
             })
 
             thread.start()
-            thread.join()
         }
 
         btn_attach.setOnClickListener{

@@ -12,6 +12,12 @@
         <item name="windowNoTitle">true</item>
     </style>
 
+    <style name="AppTheme.NoActionBarExpanded">
+        <item name="windowActionBar">false</item>
+        <item name="windowNoTitle">true</item>
+        <item name="colorPrimaryDark">#BEBEBE</item>
+    </style>
+
     <style name="SplashTheme" parent="AppTheme.NoActionBar">
         <item name="colorPrimaryDark">#3d6698</item>
         <item name="android:windowBackground">@drawable/splashscreen</item>

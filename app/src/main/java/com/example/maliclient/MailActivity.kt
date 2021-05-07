@@ -56,6 +56,7 @@ class MailActivity : AppCompatActivity() {
     lateinit var db : AppDatabase
     lateinit var user: User
     var sender_name = ""
+    var iv = ""
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -165,7 +166,7 @@ class MailActivity : AppCompatActivity() {
 
 
             runOnUiThread{
-                rv_attachments.adapter = AttachmentAdapter(this, attachments.toTypedArray(), folder, sender_mail, user.login)
+                rv_attachments.adapter = AttachmentAdapter(this, attachments.toTypedArray(), folder, sender_mail, user.login, iv)
             }
 
             //folder.close()
@@ -193,7 +194,10 @@ class MailActivity : AppCompatActivity() {
                 Cipher.getInstance("RSA/ECB/NoPadding")
             RSA.init(Cipher.DECRYPT_MODE, private)
             val key = Arrays.copyOfRange(RSA.doFinal(aes_key), 112, 128).toString(Charsets.UTF_8)
-            return decrypt(key, key, text_html.replace("\r\n", ""))
+            val text = text_html.replace("\r\n", "")
+            iv = text.slice(0..15)
+            val decrypted = decrypt(key, iv, text.slice(16 until text.length))
+            return decrypted
         }else{
             return text_html
         }

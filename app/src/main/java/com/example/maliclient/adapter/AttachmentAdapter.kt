@@ -42,7 +42,7 @@ import javax.mail.internet.MimeUtility
 import kotlin.text.Charsets.UTF_8
 
 
-class AttachmentAdapter(var context: Context, var attachments: Array<BodyPart>, var folder : Folder, var username: String, var current_username: String)
+class AttachmentAdapter(var context: Context, var attachments: Array<BodyPart>, var folder : Folder, var username: String, var current_username: String, var iv : String)
     : RecyclerView.Adapter<AttachmentAdapter.ViewHolder>() {
 
     var colors = mapOf(
@@ -153,7 +153,7 @@ class AttachmentAdapter(var context: Context, var attachments: Array<BodyPart>, 
                                 Cipher.getInstance("RSA/ECB/NoPadding")
                             RSA.init(Cipher.DECRYPT_MODE, private)
                             val key = Arrays.copyOfRange(RSA.doFinal(aes_key), 112, 128).toString(Charsets.UTF_8)
-                            val d = decrypt(key, key, attachments[num].inputStream)
+                            val d = decrypt(key, iv, attachments[num].inputStream)
                             buf_i = d
                         }
                         outputStream.write(buf_i, 0, buf_i.size)
@@ -316,7 +316,7 @@ class AttachmentAdapter(var context: Context, var attachments: Array<BodyPart>, 
                         Cipher.getInstance("RSA/ECB/NoPadding")
                     RSA.init(Cipher.DECRYPT_MODE, private)
                     val key = Arrays.copyOfRange(RSA.doFinal(aes_key), 112, 128).toString(Charsets.UTF_8)
-                    val d = decrypt(key, key, attachments[position].inputStream)
+                    val d = decrypt(key, iv, attachments[position].inputStream)
                     bitmap = BitmapFactory.decodeByteArray(d, 0, d.size)
                 }
                 else {

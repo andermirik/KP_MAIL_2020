@@ -25,6 +25,7 @@
             >
 
             <TextView
+                android:visibility="visible"
                 android:id="@+id/btn_send"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -39,6 +40,23 @@
                 app:layout_constraintHorizontal_bias="1.0"
                 app:layout_constraintStart_toEndOf="@+id/folder_name"
                 app:layout_constraintTop_toTopOf="parent" />
+
+            <com.vlad1m1r.lemniscate.BernoullisProgressView
+                android:visibility="gone"
+                android:layout_width="100dp"
+                android:layout_height="0dp"
+                android:id="@+id/is_sending_message"
+                android:layout_marginEnd="16dp"
+                app:duration="1000"
+                app:hasHole="false"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                app:lineColor="@color/colorPrimary"
+                app:maxLineLength="0.8"
+                app:minLineLength="0.4"
+                app:sizeMultiplier="1"
+                app:strokeWidth="5dp" />
 
             <ImageView
                 android:id="@+id/btn_back"

@@ -5,6 +5,7 @@ import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.Query
 import com.example.maliclient.model.MessageDb
+import java.util.*
 
 @Dao
 interface MessageDao {
@@ -16,6 +17,13 @@ interface MessageDao {
 
     @Query("SELECT * FROM messagedb WHERE folder_name = :folder_name AND userlogin = :username")
     fun getBydFolderNameAndUserName(folder_name: String, username: String) : List<MessageDb>
+
+    @Query("SELECT * FROM messagedb WHERE folder_name = :folder_name AND userlogin = :username AND sender_name LIKE :sender_name AND subject LIKE :subject AND body LIKE :body AND isReaded = :isReaded AND date BETWEEN :date1 AND :date2")
+    fun getBydFolderNameAndUserNameWithFilter(folder_name: String, username: String, subject: String, body: String, sender_name: String, isReaded: Boolean, date1: Date, date2: Date) : List<MessageDb>
+
+    @Query("SELECT * FROM messagedb WHERE folder_name = :folder_name AND userlogin = :username AND sender_name LIKE :sender_name AND subject LIKE :subject AND body LIKE :body AND date BETWEEN :date1 AND :date2")
+    fun getBydFolderNameAndUserNameWithFilter(folder_name: String, username: String, subject: String, body: String, sender_name: String, date1: Date, date2: Date) : List<MessageDb>
+
 
     @Insert
     fun insertAll(vararg messages: MessageDb)
