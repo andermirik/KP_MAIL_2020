@@ -108,13 +108,14 @@ class SendMailActivity : AppCompatActivity() {
 
             val html = AndDown().markdownToHtml(text)
             var text_to_send = "<style>$css</style><body>$html</body>"
-
+            var text_no_iv = ""
             val thread = Thread(Runnable {
                 try {
                     if (sw_crypt.isChecked) {
                         val key = getRandomString(16)  // 128 bit key
                         val iv = getRandomString(16)
-                        text_to_send = iv + encrypt(key, iv, text_to_send)
+                        text_no_iv = encrypt(key, iv, text_to_send)
+                        text_to_send = iv + text_no_iv
 
                         for (attachment in attachments) {
                             val bytes = attachment.inputStream.readBytes().toString(Charsets.UTF_8)
@@ -183,7 +184,10 @@ class SendMailActivity : AppCompatActivity() {
                     message.subject = subject
 
                     val message_body_part: BodyPart = MimeBodyPart()
-                    message_body_part.setContent(text_to_send, "text/html")
+                    //message_body_part.setContent(text_to_send, "text/html")
+                    message_body_part.setText(text_to_send)
+                    message_body_part.setHeader("Content-Type", "text/html; charset=UTF-8");
+                    message_body_part.setHeader("Content-Encoding","UTF-8");
 
                     val multipart: Multipart = MimeMultipart()
                     multipart.addBodyPart(message_body_part)

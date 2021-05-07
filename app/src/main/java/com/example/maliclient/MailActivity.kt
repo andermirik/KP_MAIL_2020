@@ -151,6 +151,7 @@ class MailActivity : AppCompatActivity() {
             attachments = getAttachments(message)
             var html: String = getTextFromMessage(message)
 
+            check_sign(html)
             html = decrypt(html)
 
             runOnUiThread{
@@ -162,7 +163,7 @@ class MailActivity : AppCompatActivity() {
 
 
 
-            check_sign(html)
+
 
 
             runOnUiThread{

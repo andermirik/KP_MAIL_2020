@@ -184,7 +184,8 @@ class MainActivity : AppCompatActivity(){
         list.add(UserCard(true))
 
         nav_view.btn_logout.setOnClickListener{
-            Toast.makeText(this, "hello", Toast.LENGTH_SHORT).show()
+            db.userDao().delete(current_user!!)
+            on_add_new_user()
         }
 
         if(db.userDao().getAll().isNotEmpty()) {
